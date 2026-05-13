@@ -1,0 +1,15 @@
+[package]
+name = "gc-core"
+description = "Core library for Ground Control — Claude Code session indexing, search, and metrics."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+rusqlite = { version = "0.35", features = ["bundled"] }
+notify = { version = "8", features = ["macos_fsevent"] }

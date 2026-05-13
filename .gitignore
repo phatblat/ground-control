@@ -1,0 +1,21 @@
+# Rust
+/target/
+Cargo.lock
+
+# Node
+node_modules/
+dist/
+
+# Tauri
+src-tauri/gen/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Ground Control data
+*.db
+
+# OS
+.DS_Store

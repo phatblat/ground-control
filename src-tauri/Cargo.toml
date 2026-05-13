@@ -1,0 +1,20 @@
+[package]
+name = "ground-control"
+description = "Ground Control — desktop app for monitoring Claude Code sessions."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "ground_control_app"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+gc-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"

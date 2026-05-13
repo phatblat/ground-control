@@ -1,0 +1,269 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/phatblat/ground-control/schema/session-entry.schema.json",
+  "title": "Claude Code Session JSONL Entry",
+  "description": "Schema for entries in ~/.claude/projects/<path>/<uuid>.jsonl — append-only session transcripts. Discriminated union on the 'type' field.",
+  "oneOf": [
+    { "$ref": "#/$defs/user" },
+    { "$ref": "#/$defs/assistant" },
+    { "$ref": "#/$defs/attachment" },
+    { "$ref": "#/$defs/system" },
+    { "$ref": "#/$defs/agent-name" },
+    { "$ref": "#/$defs/ai-title" },
+    { "$ref": "#/$defs/custom-title" },
+    { "$ref": "#/$defs/last-prompt" },
+    { "$ref": "#/$defs/permission-mode" },
+    { "$ref": "#/$defs/pr-link" },
+    { "$ref": "#/$defs/queue-operation" },
+    { "$ref": "#/$defs/file-history-snapshot" }
+  ],
+  "$defs": {
+    "common-message-fields": {
+      "type": "object",
+      "description": "Fields shared by user, assistant, attachment, and system entries.",
+      "properties": {
+        "uuid": { "type": "string", "format": "uuid" },
+        "parentUuid": {
+          "type": ["string", "null"],
+          "format": "uuid",
+          "description": "Parent in the conversation DAG. Null for root entries."
+        },
+        "sessionId": { "type": "string", "format": "uuid" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "cwd": { "type": "string" },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "gitBranch": { "type": ["string", "null"] },
+        "entrypoint": { "type": "string" },
+        "userType": { "type": "string" },
+        "isSidechain": {
+          "type": "boolean",
+          "description": "True if this entry is on a conversation branch/fork."
+        },
+        "slug": { "type": "string" }
+      }
+    },
+
+    "user": {
+      "type": "object",
+      "required": ["type", "uuid", "sessionId"],
+      "properties": {
+        "type": { "const": "user" },
+        "message": { "$ref": "#/$defs/api-message" },
+        "isCompactSummary": { "type": "boolean" },
+        "isMeta": { "type": "boolean" },
+        "isVisibleInTranscriptOnly": { "type": "boolean" },
+        "origin": { "type": "string" },
+        "permissionMode": { "type": "string" },
+        "promptId": { "type": "string" },
+        "sourceToolAssistantUUID": { "type": "string" },
+        "sourceToolUseID": { "type": "string" },
+        "toolUseResult": {}
+      },
+      "allOf": [{ "$ref": "#/$defs/common-message-fields" }]
+    },
+
+    "assistant": {
+      "type": "object",
+      "required": ["type", "uuid", "sessionId", "message"],
+      "properties": {
+        "type": { "const": "assistant" },
+        "message": { "$ref": "#/$defs/api-message" },
+        "requestId": { "type": "string" },
+        "isApiErrorMessage": { "type": "boolean" },
+        "error": {},
+        "attributionPlugin": { "type": "string" },
+        "attributionSkill": { "type": "string" }
+      },
+      "allOf": [{ "$ref": "#/$defs/common-message-fields" }]
+    },
+
+    "attachment": {
+      "type": "object",
+      "required": ["type", "uuid", "sessionId", "attachment"],
+      "properties": {
+        "type": { "const": "attachment" },
+        "attachment": {
+          "type": "object",
+          "description": "Hook lifecycle events, system context injections, etc."
+        }
+      },
+      "allOf": [{ "$ref": "#/$defs/common-message-fields" }]
+    },
+
+    "system": {
+      "type": "object",
+      "required": ["type", "uuid", "sessionId"],
+      "properties": {
+        "type": { "const": "system" },
+        "content": { "type": "string" },
+        "subtype": {
+          "type": "string",
+          "description": "System message subtype (e.g. compact, stop)."
+        },
+        "stopReason": { "type": "string" },
+        "level": { "type": "string" },
+        "isMeta": { "type": "boolean" },
+        "logicalParentUuid": { "type": "string" },
+        "toolUseID": { "type": "string" },
+        "hasOutput": { "type": "boolean" },
+        "hookCount": { "type": "integer" },
+        "hookErrors": { "type": "integer" },
+        "hookInfos": {},
+        "messageCount": { "type": "integer" },
+        "durationMs": { "type": "number" },
+        "preventedContinuation": { "type": "boolean" },
+        "compactMetadata": {
+          "type": "object",
+          "description": "Metadata about context compaction events."
+        }
+      },
+      "allOf": [{ "$ref": "#/$defs/common-message-fields" }]
+    },
+
+    "agent-name": {
+      "type": "object",
+      "required": ["type", "sessionId", "agentName"],
+      "properties": {
+        "type": { "const": "agent-name" },
+        "sessionId": { "type": "string", "format": "uuid" },
+        "agentName": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "ai-title": {
+      "type": "object",
+      "required": ["type", "sessionId", "aiTitle"],
+      "properties": {
+        "type": { "const": "ai-title" },
+        "sessionId": { "type": "string", "format": "uuid" },
+        "aiTitle": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "custom-title": {
+      "type": "object",
+      "required": ["type", "sessionId", "customTitle"],
+      "properties": {
+        "type": { "const": "custom-title" },
+        "sessionId": { "type": "string", "format": "uuid" },
+        "customTitle": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "last-prompt": {
+      "type": "object",
+      "required": ["type", "sessionId"],
+      "properties": {
+        "type": { "const": "last-prompt" },
+        "sessionId": { "type": "string", "format": "uuid" },
+        "lastPrompt": { "type": "string" },
+        "leafUuid": { "type": "string", "format": "uuid" }
+      },
+      "additionalProperties": false
+    },
+
+    "permission-mode": {
+      "type": "object",
+      "required": ["type", "sessionId", "permissionMode"],
+      "properties": {
+        "type": { "const": "permission-mode" },
+        "sessionId": { "type": "string", "format": "uuid" },
+        "permissionMode": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "pr-link": {
+      "type": "object",
+      "required": ["type", "sessionId", "prUrl"],
+      "properties": {
+        "type": { "const": "pr-link" },
+        "sessionId": { "type": "string", "format": "uuid" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "prUrl": { "type": "string", "format": "uri" },
+        "prNumber": { "type": "integer" },
+        "prRepository": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "queue-operation": {
+      "type": "object",
+      "required": ["type", "sessionId", "operation"],
+      "properties": {
+        "type": { "const": "queue-operation" },
+        "sessionId": { "type": "string", "format": "uuid" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "operation": { "type": "string" },
+        "content": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "file-history-snapshot": {
+      "type": "object",
+      "required": ["type", "snapshot"],
+      "properties": {
+        "type": { "const": "file-history-snapshot" },
+        "messageId": { "type": "string" },
+        "isSnapshotUpdate": { "type": "boolean" },
+        "snapshot": {
+          "type": "object",
+          "description": "Git state baseline and tracked file backups."
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "api-message": {
+      "type": "object",
+      "description": "Anthropic API message format (user or assistant role).",
+      "required": ["role", "content"],
+      "properties": {
+        "role": { "type": "string", "enum": ["user", "assistant"] },
+        "content": {
+          "oneOf": [
+            { "type": "string" },
+            {
+              "type": "array",
+              "items": { "$ref": "#/$defs/content-block" }
+            }
+          ]
+        },
+        "model": { "type": "string" },
+        "usage": { "$ref": "#/$defs/token-usage" }
+      }
+    },
+
+    "content-block": {
+      "type": "object",
+      "description": "Content block within an API message.",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["text", "tool_use", "tool_result", "thinking"]
+        }
+      }
+    },
+
+    "token-usage": {
+      "type": "object",
+      "description": "Token usage counters from the Anthropic API response.",
+      "properties": {
+        "input_tokens": { "type": "integer" },
+        "output_tokens": { "type": "integer" },
+        "cache_creation_input_tokens": { "type": "integer" },
+        "cache_read_input_tokens": { "type": "integer" },
+        "service_tier": { "type": "string" },
+        "speed": { "type": "string" }
+      }
+    }
+  }
+}

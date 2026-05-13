@@ -1,0 +1,25 @@
+{
+  "name": "ground-control",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5",
+    "@tauri-apps/cli": "^2",
+    "@tsconfig/svelte": "^5",
+    "svelte": "^5",
+    "svelte-check": "^4",
+    "typescript": "^5",
+    "vite": "^6"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2"
+  }
+}

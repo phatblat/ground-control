@@ -1,0 +1,18 @@
+[package]
+name = "gc-cli"
+description = "CLI for Ground Control — monitor and manage Claude Code sessions."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "gc"
+path = "src/main.rs"
+
+[dependencies]
+gc-core = { workspace = true }
+clap = { version = "4", features = ["derive"] }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+anyhow = { workspace = true }
+dirs-next = { workspace = true }

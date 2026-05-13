@@ -1,0 +1,30 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicferrier/tauri-schema/refs/heads/main/tauri-conf-v2.schema.json",
+  "productName": "Ground Control",
+  "version": "0.1.0",
+  "identifier": "com.phatblat.ground-control",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Ground Control",
+        "width": 1200,
+        "height": 800,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png"]
+  }
+}

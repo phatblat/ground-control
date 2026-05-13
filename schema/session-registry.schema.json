@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/phatblat/ground-control/schema/session-registry.schema.json",
+  "title": "Claude Code Live Session Registry",
+  "description": "Schema for ~/.claude/sessions/<pid>.json — live heartbeat files for running Claude Code sessions.",
+  "type": "object",
+  "required": [
+    "pid",
+    "sessionId",
+    "cwd",
+    "startedAt",
+    "version",
+    "kind",
+    "entrypoint",
+    "status",
+    "updatedAt"
+  ],
+  "properties": {
+    "pid": {
+      "type": "integer",
+      "description": "OS process ID of the Claude Code session."
+    },
+    "sessionId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUID identifying this session. Matches the JSONL filename in projects/."
+    },
+    "cwd": {
+      "type": "string",
+      "description": "Working directory the session was started in."
+    },
+    "startedAt": {
+      "type": "integer",
+      "description": "Unix timestamp in milliseconds when the session started."
+    },
+    "procStart": {
+      "type": "string",
+      "description": "Human-readable process start time."
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "Claude Code version (e.g. '2.1.140')."
+    },
+    "peerProtocol": {
+      "type": "integer",
+      "description": "IPC protocol version for peer communication."
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["interactive", "background"],
+      "description": "Whether the session is interactive or a background agent."
+    },
+    "entrypoint": {
+      "type": "string",
+      "enum": ["cli", "sdk"],
+      "description": "How the session was launched."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["idle", "busy"],
+      "description": "Current session activity state."
+    },
+    "updatedAt": {
+      "type": "integer",
+      "description": "Unix timestamp in milliseconds of last status update."
+    },
+    "name": {
+      "type": "string",
+      "description": "User-assigned session name (via --name or /rename)."
+    }
+  },
+  "additionalProperties": true
+}

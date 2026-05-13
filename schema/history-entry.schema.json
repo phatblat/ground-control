@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/phatblat/ground-control/schema/history-entry.schema.json",
+  "title": "Claude Code History Entry",
+  "description": "Schema for entries in ~/.claude/history.jsonl — global prompt history.",
+  "type": "object",
+  "required": ["prompt", "timestamp"],
+  "properties": {
+    "prompt": {
+      "type": "string",
+      "description": "The user's prompt text."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the prompt was submitted."
+    },
+    "sessionId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Session this prompt was submitted in."
+    },
+    "cwd": {
+      "type": "string",
+      "description": "Working directory at prompt time."
+    }
+  },
+  "additionalProperties": true
+}
