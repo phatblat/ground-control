@@ -9,7 +9,10 @@ pub enum ParseError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
     #[error("JSON error at line {line}: {source}")]
-    Json { line: usize, source: serde_json::Error },
+    Json {
+        line: usize,
+        source: serde_json::Error,
+    },
 }
 
 pub fn read_session_registry(path: &Path) -> Result<SessionRegistry, ParseError> {
@@ -47,18 +50,10 @@ pub fn list_projects(projects_dir: &Path) -> Result<Vec<ProjectInfo>, ParseError
         }
         let encoded = entry.file_name().to_string_lossy().to_string();
         let original = decode_project_path(&encoded);
-        let display = original
-            .rsplit('/')
-            .next()
-            .unwrap_or(&original)
-            .to_string();
+        let display = original.rsplit('/').next().unwrap_or(&original).to_string();
         let session_count = fs::read_dir(entry.path())?
             .filter_map(|e| e.ok())
-            .filter(|e| {
-                e.path()
-                    .extension()
-                    .is_some_and(|ext| ext == "jsonl")
-            })
+            .filter(|e| e.path().extension().is_some_and(|ext| ext == "jsonl"))
             .count();
         projects.push(ProjectInfo {
             encoded_path: encoded,

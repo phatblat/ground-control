@@ -123,22 +123,24 @@ impl Store {
              JOIN sessions s ON f.session_id = s.session_id
              WHERE sessions_fts MATCH ?1
              ORDER BY rank
-             LIMIT 50"
+             LIMIT 50",
         )?;
 
-        let results = stmt.query_map(params![query], |row| {
-            Ok(SearchResult {
-                session_id: row.get(0)?,
-                project_path: row.get(1)?,
-                display_name: row.get(2)?,
-                custom_title: row.get(3)?,
-                ai_title: row.get(4)?,
-                agent_name: row.get(5)?,
-                input_tokens: row.get(6)?,
-                output_tokens: row.get(7)?,
-                message_count: row.get(8)?,
-            })
-        })?.collect::<Result<Vec<_>, _>>()?;
+        let results = stmt
+            .query_map(params![query], |row| {
+                Ok(SearchResult {
+                    session_id: row.get(0)?,
+                    project_path: row.get(1)?,
+                    display_name: row.get(2)?,
+                    custom_title: row.get(3)?,
+                    ai_title: row.get(4)?,
+                    agent_name: row.get(5)?,
+                    input_tokens: row.get(6)?,
+                    output_tokens: row.get(7)?,
+                    message_count: row.get(8)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
 
         Ok(results)
     }
@@ -150,22 +152,24 @@ impl Store {
                     input_tokens, output_tokens, message_count
              FROM sessions
              ORDER BY indexed_at DESC
-             LIMIT 100"
+             LIMIT 100",
         )?;
 
-        let results = stmt.query_map([], |row| {
-            Ok(SearchResult {
-                session_id: row.get(0)?,
-                project_path: row.get(1)?,
-                display_name: row.get(2)?,
-                custom_title: row.get(3)?,
-                ai_title: row.get(4)?,
-                agent_name: row.get(5)?,
-                input_tokens: row.get(6)?,
-                output_tokens: row.get(7)?,
-                message_count: row.get(8)?,
-            })
-        })?.collect::<Result<Vec<_>, _>>()?;
+        let results = stmt
+            .query_map([], |row| {
+                Ok(SearchResult {
+                    session_id: row.get(0)?,
+                    project_path: row.get(1)?,
+                    display_name: row.get(2)?,
+                    custom_title: row.get(3)?,
+                    ai_title: row.get(4)?,
+                    agent_name: row.get(5)?,
+                    input_tokens: row.get(6)?,
+                    output_tokens: row.get(7)?,
+                    message_count: row.get(8)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
 
         Ok(results)
     }
@@ -175,7 +179,7 @@ impl Store {
             "SELECT COUNT(*), COALESCE(SUM(input_tokens), 0), COALESCE(SUM(output_tokens), 0),
                     COALESCE(SUM(cache_read), 0), COALESCE(SUM(cache_create), 0),
                     COALESCE(SUM(message_count), 0)
-             FROM sessions"
+             FROM sessions",
         )?;
 
         stmt.query_row([], |row| {
@@ -187,7 +191,8 @@ impl Store {
                 total_cache_create: row.get(4)?,
                 total_messages: row.get(5)?,
             })
-        }).map_err(StoreError::from)
+        })
+        .map_err(StoreError::from)
     }
 }
 

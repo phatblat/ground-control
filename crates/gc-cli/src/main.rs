@@ -3,7 +3,10 @@ use gc_core::{parser, projects_dir, sessions_dir, store::Store};
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "gc", about = "Ground Control — monitor and manage Claude Code sessions")]
+#[command(
+    name = "gc",
+    about = "Ground Control — monitor and manage Claude Code sessions"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -90,10 +93,7 @@ fn cmd_search(store: &Store, query: &str) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    println!(
-        "{:<40} {:<20} {:>10}",
-        "TITLE", "PROJECT", "TOKENS"
-    );
+    println!("{:<40} {:<20} {:>10}", "TITLE", "PROJECT", "TOKENS");
     println!("{}", "-".repeat(74));
     for r in &results {
         let tokens = r.input_tokens + r.output_tokens;
@@ -115,9 +115,18 @@ fn cmd_burn(store: &Store) -> anyhow::Result<()> {
     println!("Sessions:       {:>12}", summary.session_count);
     println!("Messages:       {:>12}", summary.total_messages);
     println!("Input tokens:   {:>12}", format_tokens(summary.total_input));
-    println!("Output tokens:  {:>12}", format_tokens(summary.total_output));
-    println!("Cache read:     {:>12}", format_tokens(summary.total_cache_read));
-    println!("Cache create:   {:>12}", format_tokens(summary.total_cache_create));
+    println!(
+        "Output tokens:  {:>12}",
+        format_tokens(summary.total_output)
+    );
+    println!(
+        "Cache read:     {:>12}",
+        format_tokens(summary.total_cache_read)
+    );
+    println!(
+        "Cache create:   {:>12}",
+        format_tokens(summary.total_cache_create)
+    );
     let total = summary.total_input + summary.total_output;
     println!("{}", "-".repeat(40));
     println!("Total tokens:   {:>12}", format_tokens(total));
@@ -131,17 +140,10 @@ fn cmd_live() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    println!(
-        "{:<8} {:<12} {:<30} {:<10}",
-        "PID", "STATUS", "CWD", "NAME"
-    );
+    println!("{:<8} {:<12} {:<30} {:<10}", "PID", "STATUS", "CWD", "NAME");
     println!("{}", "-".repeat(64));
     for s in &sessions {
-        let cwd_short = s
-            .cwd
-            .rsplit('/')
-            .next()
-            .unwrap_or(&s.cwd);
+        let cwd_short = s.cwd.rsplit('/').next().unwrap_or(&s.cwd);
         println!(
             "{:<8} {:<12} {:<30} {:<10}",
             s.pid,
@@ -180,7 +182,10 @@ fn cmd_index(store: &Store) -> anyhow::Result<()> {
         }
     }
 
-    println!("Indexed {total} sessions across {} projects.", projects.len());
+    println!(
+        "Indexed {total} sessions across {} projects.",
+        projects.len()
+    );
     Ok(())
 }
 
