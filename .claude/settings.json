@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$TOOL_INPUT\" | grep -q '\\.rs'; then cargo clippy --workspace -- -D warnings 2>&1; fi",
+            "timeout": 120000
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -112,7 +112,7 @@ pub fn parse_session_summary(
         message_count: 0,
     };
 
-    for (_line_num, line) in reader.lines().enumerate() {
+    for line in reader.lines() {
         let line = line?;
         if line.is_empty() {
             continue;
