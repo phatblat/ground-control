@@ -118,7 +118,8 @@ impl Store {
         let mut stmt = self.conn.prepare(
             "SELECT s.session_id, s.project_path, s.display_name,
                     s.custom_title, s.ai_title, s.agent_name,
-                    s.input_tokens, s.output_tokens, s.message_count
+                    s.input_tokens, s.output_tokens,
+                    s.cache_read, s.cache_create, s.message_count
              FROM sessions_fts f
              JOIN sessions s ON f.session_id = s.session_id
              WHERE sessions_fts MATCH ?1
@@ -137,7 +138,9 @@ impl Store {
                     agent_name: row.get(5)?,
                     input_tokens: row.get(6)?,
                     output_tokens: row.get(7)?,
-                    message_count: row.get(8)?,
+                    cache_read: row.get(8)?,
+                    cache_create: row.get(9)?,
+                    message_count: row.get(10)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -149,7 +152,8 @@ impl Store {
         let mut stmt = self.conn.prepare(
             "SELECT session_id, project_path, display_name,
                     custom_title, ai_title, agent_name,
-                    input_tokens, output_tokens, message_count
+                    input_tokens, output_tokens,
+                    cache_read, cache_create, message_count
              FROM sessions
              ORDER BY indexed_at DESC
              LIMIT 100",
@@ -166,7 +170,9 @@ impl Store {
                     agent_name: row.get(5)?,
                     input_tokens: row.get(6)?,
                     output_tokens: row.get(7)?,
-                    message_count: row.get(8)?,
+                    cache_read: row.get(8)?,
+                    cache_create: row.get(9)?,
+                    message_count: row.get(10)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -206,6 +212,8 @@ pub struct SearchResult {
     pub agent_name: Option<String>,
     pub input_tokens: i64,
     pub output_tokens: i64,
+    pub cache_read: i64,
+    pub cache_create: i64,
     pub message_count: i64,
 }
 
@@ -216,6 +224,10 @@ impl SearchResult {
             .or(self.ai_title.as_deref())
             .or(self.agent_name.as_deref())
             .unwrap_or("untitled")
+    }
+
+    pub fn total_tokens(&self) -> i64 {
+        self.input_tokens + self.output_tokens + self.cache_read + self.cache_create
     }
 }
 

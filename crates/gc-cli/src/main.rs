@@ -73,7 +73,7 @@ fn cmd_list(store: &Store, project_filter: Option<&str>) -> anyhow::Result<()> {
     );
     println!("{}", "-".repeat(82));
     for r in &results {
-        let tokens = r.input_tokens + r.output_tokens;
+        let tokens = r.total_tokens();
         println!(
             "{:<40} {:<20} {:>10} {:>8}",
             truncate(r.title(), 39),
@@ -96,7 +96,7 @@ fn cmd_search(store: &Store, query: &str) -> anyhow::Result<()> {
     println!("{:<40} {:<20} {:>10}", "TITLE", "PROJECT", "TOKENS");
     println!("{}", "-".repeat(74));
     for r in &results {
-        let tokens = r.input_tokens + r.output_tokens;
+        let tokens = r.total_tokens();
         println!(
             "{:<40} {:<20} {:>10}",
             truncate(r.title(), 39),
@@ -110,26 +110,23 @@ fn cmd_search(store: &Store, query: &str) -> anyhow::Result<()> {
 
 fn cmd_burn(store: &Store) -> anyhow::Result<()> {
     let summary = store.token_summary()?;
+    let total_input =
+        summary.total_input + summary.total_cache_read + summary.total_cache_create;
+    let total = total_input + summary.total_output;
+
     println!("Ground Control — Token Burn Summary");
-    println!("{}", "=".repeat(40));
-    println!("Sessions:       {:>12}", summary.session_count);
-    println!("Messages:       {:>12}", summary.total_messages);
-    println!("Input tokens:   {:>12}", format_tokens(summary.total_input));
-    println!(
-        "Output tokens:  {:>12}",
-        format_tokens(summary.total_output)
-    );
-    println!(
-        "Cache read:     {:>12}",
-        format_tokens(summary.total_cache_read)
-    );
-    println!(
-        "Cache create:   {:>12}",
-        format_tokens(summary.total_cache_create)
-    );
-    let total = summary.total_input + summary.total_output;
-    println!("{}", "-".repeat(40));
-    println!("Total tokens:   {:>12}", format_tokens(total));
+    println!("{}", "=".repeat(44));
+    println!("Sessions:           {:>12}", summary.session_count);
+    println!("Messages:           {:>12}", summary.total_messages);
+    println!("{}", "-".repeat(44));
+    println!("Input (non-cached): {:>12}", format_tokens(summary.total_input));
+    println!("Input (cache read): {:>12}", format_tokens(summary.total_cache_read));
+    println!("Input (cache new):  {:>12}", format_tokens(summary.total_cache_create));
+    println!("Input total:        {:>12}", format_tokens(total_input));
+    println!("{}", "-".repeat(44));
+    println!("Output:             {:>12}", format_tokens(summary.total_output));
+    println!("{}", "=".repeat(44));
+    println!("Total:              {:>12}", format_tokens(total));
     Ok(())
 }
 
