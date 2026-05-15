@@ -110,8 +110,7 @@ fn cmd_search(store: &Store, query: &str) -> anyhow::Result<()> {
 
 fn cmd_burn(store: &Store) -> anyhow::Result<()> {
     let summary = store.token_summary()?;
-    let total_input =
-        summary.total_input + summary.total_cache_read + summary.total_cache_create;
+    let total_input = summary.total_input + summary.total_cache_read + summary.total_cache_create;
     let total = total_input + summary.total_output;
 
     println!("Ground Control — Token Burn Summary");
@@ -119,12 +118,24 @@ fn cmd_burn(store: &Store) -> anyhow::Result<()> {
     println!("Sessions:           {:>12}", summary.session_count);
     println!("Messages:           {:>12}", summary.total_messages);
     println!("{}", "-".repeat(44));
-    println!("Input (non-cached): {:>12}", format_tokens(summary.total_input));
-    println!("Input (cache read): {:>12}", format_tokens(summary.total_cache_read));
-    println!("Input (cache new):  {:>12}", format_tokens(summary.total_cache_create));
+    println!(
+        "Input (non-cached): {:>12}",
+        format_tokens(summary.total_input)
+    );
+    println!(
+        "Input (cache read): {:>12}",
+        format_tokens(summary.total_cache_read)
+    );
+    println!(
+        "Input (cache new):  {:>12}",
+        format_tokens(summary.total_cache_create)
+    );
     println!("Input total:        {:>12}", format_tokens(total_input));
     println!("{}", "-".repeat(44));
-    println!("Output:             {:>12}", format_tokens(summary.total_output));
+    println!(
+        "Output:             {:>12}",
+        format_tokens(summary.total_output)
+    );
     println!("{}", "=".repeat(44));
     println!("Total:              {:>12}", format_tokens(total));
     Ok(())
