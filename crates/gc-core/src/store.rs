@@ -74,7 +74,13 @@ impl Store {
                 VALUES ('delete', old.rowid, old.session_id, old.custom_title, old.ai_title, old.agent_name, old.project_path);
                 INSERT INTO sessions_fts(rowid, session_id, custom_title, ai_title, agent_name, project_path)
                 VALUES (new.rowid, new.session_id, new.custom_title, new.ai_title, new.agent_name, new.project_path);
-            END;"
+            END;
+
+            CREATE TABLE IF NOT EXISTS index_state (
+                jsonl_path    TEXT PRIMARY KEY,
+                byte_offset   INTEGER NOT NULL DEFAULT 0,
+                updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+            );"
         )?;
         Ok(())
     }
@@ -199,6 +205,30 @@ impl Store {
             })
         })
         .map_err(StoreError::from)
+    }
+
+    pub fn get_byte_offset(&self, jsonl_path: &str) -> Result<u64, StoreError> {
+        let offset: i64 = self
+            .conn
+            .query_row(
+                "SELECT byte_offset FROM index_state WHERE jsonl_path = ?1",
+                params![jsonl_path],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        Ok(offset as u64)
+    }
+
+    pub fn set_byte_offset(&self, jsonl_path: &str, offset: u64) -> Result<(), StoreError> {
+        self.conn.execute(
+            "INSERT INTO index_state (jsonl_path, byte_offset)
+             VALUES (?1, ?2)
+             ON CONFLICT(jsonl_path) DO UPDATE SET
+                byte_offset = excluded.byte_offset,
+                updated_at = datetime('now')",
+            params![jsonl_path, offset as i64],
+        )?;
+        Ok(())
     }
 }
 

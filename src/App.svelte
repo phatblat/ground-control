@@ -1,5 +1,7 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
+  import { listen } from "@tauri-apps/api/event";
+  import { onMount } from "svelte";
 
   interface LiveSession {
     pid: number;
@@ -20,14 +22,35 @@
 
   let sessions = $state<LiveSession[]>([]);
   let projects = $state<Project[]>([]);
+  let lastUpdated = $state<string | null>(null);
 
-  async function refresh() {
-    sessions = await invoke<LiveSession[]>("list_live_sessions");
+  function formatTime(date: Date): string {
+    return date.toLocaleTimeString();
+  }
+
+  async function refreshProjects() {
     projects = await invoke<Project[]>("list_projects");
   }
 
-  $effect(() => {
-    refresh();
+  async function refresh() {
+    sessions = await invoke<LiveSession[]>("list_live_sessions");
+    lastUpdated = formatTime(new Date());
+    await refreshProjects();
+  }
+
+  onMount(() => {
+    // Load projects on mount
+    refreshProjects();
+
+    // Listen for real-time session updates from the watcher
+    const unlistenPromise = listen<LiveSession[]>("sessions-updated", (event) => {
+      sessions = event.payload;
+      lastUpdated = formatTime(new Date());
+    });
+
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten());
+    };
   });
 </script>
 
@@ -35,7 +58,12 @@
   <h1>Ground Control</h1>
 
   <section>
-    <h2>Live Sessions ({sessions.length})</h2>
+    <div class="section-header">
+      <h2>Live Sessions ({sessions.length})</h2>
+      {#if lastUpdated}
+        <span class="last-updated">Updated {lastUpdated}</span>
+      {/if}
+    </div>
     {#if sessions.length === 0}
       <p class="empty">No active sessions</p>
     {:else}
@@ -192,6 +220,22 @@
     font-size: 0.8rem;
     color: #999;
     margin: 0.5rem 0 0;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .section-header h2 {
+    margin-bottom: 0;
+  }
+
+  .last-updated {
+    font-size: 0.75rem;
+    color: #555;
   }
 
   .empty {

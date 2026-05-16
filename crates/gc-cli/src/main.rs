@@ -1,6 +1,9 @@
-use clap::{Parser, Subcommand};
-use gc_core::{parser, projects_dir, sessions_dir, store::Store};
 use std::path::PathBuf;
+use std::sync::mpsc::RecvTimeoutError;
+use std::time::Duration;
+
+use clap::{Parser, Subcommand};
+use gc_core::{parser, projects_dir, sessions_dir, store::Store, watcher::GcWatcher};
 
 #[derive(Parser)]
 #[command(
@@ -31,6 +34,8 @@ enum Commands {
     Live,
     /// Reindex all session data
     Index,
+    /// Watch live sessions with auto-refresh
+    Watch,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -47,6 +52,7 @@ fn main() -> anyhow::Result<()> {
         Commands::Burn => cmd_burn(&store)?,
         Commands::Live => cmd_live()?,
         Commands::Index => cmd_index(&store)?,
+        Commands::Watch => cmd_watch(&store)?,
     }
 
     Ok(())
@@ -143,14 +149,19 @@ fn cmd_burn(store: &Store) -> anyhow::Result<()> {
 
 fn cmd_live() -> anyhow::Result<()> {
     let sessions = parser::list_live_sessions(&sessions_dir())?;
+    print_live_table(&sessions);
+    Ok(())
+}
+
+fn print_live_table(sessions: &[gc_core::models::SessionRegistry]) {
     if sessions.is_empty() {
         println!("No live sessions.");
-        return Ok(());
+        return;
     }
 
     println!("{:<8} {:<12} {:<30} {:<10}", "PID", "STATUS", "CWD", "NAME");
     println!("{}", "-".repeat(64));
-    for s in &sessions {
+    for s in sessions {
         let cwd_short = s.cwd.rsplit('/').next().unwrap_or(&s.cwd);
         println!(
             "{:<8} {:<12} {:<30} {:<10}",
@@ -161,7 +172,68 @@ fn cmd_live() -> anyhow::Result<()> {
         );
     }
     println!("\n{} live session(s)", sessions.len());
+}
+
+fn cmd_watch(store: &Store) -> anyhow::Result<()> {
+    let sessions_dir = sessions_dir();
+    let projects_dir = projects_dir();
+
+    let watcher = GcWatcher::new(&sessions_dir, &projects_dir)
+        .map_err(|e| anyhow::anyhow!("Failed to start file watcher: {e}"))?;
+
+    // Initial display
+    let sessions = parser::list_live_sessions(&sessions_dir).unwrap_or_default();
+    print_live_table(&sessions);
+    print_refresh_timestamp();
+
+    loop {
+        match watcher.recv_timeout(Duration::from_secs(2)) {
+            Ok(gc_core::watcher::GcEvent::SessionFileChanged {
+                project_path,
+                jsonl_path,
+            }) => {
+                // Incremental indexing for changed session files
+                let jsonl_key = jsonl_path.to_string_lossy().to_string();
+                let offset = store.get_byte_offset(&jsonl_key).unwrap_or(0);
+                let existing = None; // fresh parse from offset
+                if let Ok(result) =
+                    parser::parse_session_incremental(&project_path, &jsonl_path, offset, existing)
+                {
+                    let _ = store.upsert_session(&result.summary);
+                    let _ = store.set_byte_offset(&jsonl_key, result.new_offset);
+                }
+
+                refresh_display(&sessions_dir);
+            }
+            Ok(_event) => {
+                // Session started/updated/ended — refresh the live table
+                refresh_display(&sessions_dir);
+            }
+            Err(RecvTimeoutError::Timeout) => {
+                // Periodic refresh to catch any missed changes
+                refresh_display(&sessions_dir);
+            }
+            Err(RecvTimeoutError::Disconnected) => {
+                // Watcher dropped — exit gracefully
+                break;
+            }
+        }
+    }
+
     Ok(())
+}
+
+fn refresh_display(sessions_dir: &std::path::Path) {
+    // Clear screen and move cursor to top-left
+    print!("\x1b[2J\x1b[H");
+    let sessions = parser::list_live_sessions(sessions_dir).unwrap_or_default();
+    print_live_table(&sessions);
+    print_refresh_timestamp();
+}
+
+fn print_refresh_timestamp() {
+    let now = chrono::Local::now();
+    println!("\nLast refresh: {}", now.format("%Y-%m-%d %H:%M:%S"));
 }
 
 fn cmd_index(store: &Store) -> anyhow::Result<()> {

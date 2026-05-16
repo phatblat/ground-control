@@ -1,6 +1,7 @@
 pub mod models;
 pub mod parser;
 pub mod store;
+pub mod watcher;
 
 use std::path::PathBuf;
 

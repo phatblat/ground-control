@@ -118,34 +118,7 @@ pub fn parse_session_summary(
             Err(_) => continue,
         };
 
-        match entry {
-            SessionEntry::CustomTitle(t) => summary.custom_title = Some(t.custom_title),
-            SessionEntry::AiTitle(t) => summary.ai_title = Some(t.ai_title),
-            SessionEntry::AgentName(a) => summary.agent_name = Some(a.agent_name),
-            SessionEntry::Assistant(a) => {
-                summary.message_count += 1;
-                if summary.version.is_none() {
-                    summary.version = a.common.version.clone();
-                }
-                if summary.git_branch.is_none() {
-                    summary.git_branch = a.common.git_branch.clone();
-                }
-                if let Some(usage) = &a.message.usage {
-                    summary.total_input_tokens += usage.input_tokens.unwrap_or(0);
-                    summary.total_output_tokens += usage.output_tokens.unwrap_or(0);
-                    summary.total_cache_read_tokens += usage.cache_read_input_tokens.unwrap_or(0);
-                    summary.total_cache_creation_tokens +=
-                        usage.cache_creation_input_tokens.unwrap_or(0);
-                }
-            }
-            SessionEntry::User(u) => {
-                summary.message_count += 1;
-                if summary.version.is_none() {
-                    summary.version = u.common.version.clone();
-                }
-            }
-            _ => {}
-        }
+        apply_entry_to_summary(&mut summary, entry);
     }
 
     summary.display_name = project_path
@@ -171,6 +144,122 @@ pub fn list_session_jsonls(project_dir: &Path) -> Result<Vec<PathBuf>, ParseErro
     }
     paths.sort();
     Ok(paths)
+}
+
+pub struct IncrementalResult {
+    pub summary: SessionSummary,
+    pub new_offset: u64,
+}
+
+pub fn parse_session_incremental(
+    project_path: &str,
+    jsonl_path: &Path,
+    start_offset: u64,
+    existing: Option<SessionSummary>,
+) -> Result<IncrementalResult, ParseError> {
+    let session_id = jsonl_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .and_then(|s| uuid::Uuid::parse_str(s).ok())
+        .unwrap_or_else(uuid::Uuid::new_v4);
+
+    let file = fs::File::open(jsonl_path)?;
+    let file_len = file.metadata()?.len();
+
+    if file_len <= start_offset {
+        let summary = existing.unwrap_or_else(|| empty_summary(session_id, project_path));
+        return Ok(IncrementalResult {
+            summary,
+            new_offset: start_offset,
+        });
+    }
+
+    use std::io::Seek;
+    let mut file = file;
+    file.seek(std::io::SeekFrom::Start(start_offset))?;
+    let reader = BufReader::new(file);
+
+    let mut summary = existing.unwrap_or_else(|| empty_summary(session_id, project_path));
+    let mut bytes_read = start_offset;
+
+    for line in reader.lines() {
+        let line = line?;
+        bytes_read += line.len() as u64 + 1; // +1 for newline
+        if line.is_empty() {
+            continue;
+        }
+
+        let entry: SessionEntry = match serde_json::from_str(&line) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+
+        apply_entry_to_summary(&mut summary, entry);
+    }
+
+    summary.display_name = project_path
+        .rsplit('/')
+        .next()
+        .unwrap_or(project_path)
+        .to_string();
+
+    Ok(IncrementalResult {
+        summary,
+        new_offset: bytes_read,
+    })
+}
+
+fn apply_entry_to_summary(summary: &mut SessionSummary, entry: SessionEntry) {
+    match entry {
+        SessionEntry::CustomTitle(t) => summary.custom_title = Some(t.custom_title),
+        SessionEntry::AiTitle(t) => summary.ai_title = Some(t.ai_title),
+        SessionEntry::AgentName(a) => summary.agent_name = Some(a.agent_name),
+        SessionEntry::Assistant(a) => {
+            summary.message_count += 1;
+            if summary.version.is_none() {
+                summary.version = a.common.version.clone();
+            }
+            if summary.git_branch.is_none() {
+                summary.git_branch = a.common.git_branch.clone();
+            }
+            if let Some(usage) = &a.message.usage {
+                summary.total_input_tokens += usage.input_tokens.unwrap_or(0);
+                summary.total_output_tokens += usage.output_tokens.unwrap_or(0);
+                summary.total_cache_read_tokens += usage.cache_read_input_tokens.unwrap_or(0);
+                summary.total_cache_creation_tokens +=
+                    usage.cache_creation_input_tokens.unwrap_or(0);
+            }
+        }
+        SessionEntry::User(u) => {
+            summary.message_count += 1;
+            if summary.version.is_none() {
+                summary.version = u.common.version.clone();
+            }
+        }
+        _ => {}
+    }
+}
+
+fn empty_summary(session_id: uuid::Uuid, project_path: &str) -> SessionSummary {
+    SessionSummary {
+        session_id,
+        project_path: project_path.to_string(),
+        display_name: String::new(),
+        custom_title: None,
+        ai_title: None,
+        agent_name: None,
+        started_at: None,
+        updated_at: None,
+        version: None,
+        git_branch: None,
+        kind: None,
+        status: None,
+        total_input_tokens: 0,
+        total_output_tokens: 0,
+        total_cache_read_tokens: 0,
+        total_cache_creation_tokens: 0,
+        message_count: 0,
+    }
 }
 
 fn decode_project_path(encoded: &str) -> String {
