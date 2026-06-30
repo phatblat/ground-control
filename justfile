@@ -62,7 +62,7 @@ clean:
 
 # Install JS dependencies
 [group('configuration')]
-install:
+deps:
     npm install
 
 # Format Rust code
@@ -77,12 +77,12 @@ format:
 
 # Run Tauri dev server
 [group('tauri')]
-dev: install
+dev: deps
     cargo tauri dev
 
 # Build Tauri app
 [group('tauri')]
-app: install
+app: deps
     cargo tauri build
 
 #
