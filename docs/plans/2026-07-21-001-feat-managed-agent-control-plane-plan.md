@@ -95,6 +95,7 @@ Service interruptions are especially costly. A request may fail before dispatch,
 - R22. The first managed attempt and every retry must use an isolated Git worktree created from a verified workspace seed that does not modify the source checkout. Unsupported, dirty-unbounded, or oversized state must disable automatic retry and retain manual guidance.
 - R23. Same-attempt resume is permitted only when thread, workspace, runtime, config, and instruction fingerprints still match an unambiguous resumable state.
 - R24. “Retry with recovery brief” must bind generated facts and confirmation to the latest evidence decision cursor, restore a verified filesystem checkpoint, preserve the failed worktree, and require acknowledgement when effects are unknown or unsafe. Same-provider retry may fork through the checkpoint turn when capability-proven; alternate-provider fallback starts a new conversation with a sensitivity-filtered brief.
+- R36. Ground Control's journal must remain the durability authority. Workflow steps require stable identities, reducer-derived eligibility, durable due times, and separate intent, dispatch-started, acknowledgement, and outcome states; restart may safely dispatch an eligible unstarted step but must quarantine a started step whose outcome cannot be proven rather than replaying it.
 
 **Evidence, acceptance, and UI**
 
@@ -173,6 +174,7 @@ Service interruptions are especially costly. A request may fail before dispatch,
 - AE12. A missing plugin produces a capability-disabled reason and an installation proposal, but the broker does not install it during negotiation.
 - AE13. Evidence changes after a recovery brief is displayed, so confirmation receives a stale-decision conflict and no worktree restore or model invocation occurs until the brief is regenerated.
 - AE14. Disk-full before intent blocks the mutation; disk-full after external acknowledgement quarantines the attempt as degraded and prevents automatic retry until storage repair and reconciliation.
+- AE15. The daemon is killed before a due step, after a step becomes eligible, and after dispatch starts. Restart preserves the original due time, executes an eligible unstarted step at most once, and marks the started-unacknowledged step outcome-unknown without an automatic duplicate.
 
 ### Scope Boundaries
 
@@ -213,6 +215,7 @@ Service interruptions are especially costly. A request may fail before dispatch,
 - KTD13. Name the recovery action “Retry with recovery brief.” (session-settled: user-directed — chosen over replay-oriented wording: the action starts new work with evidence-aware guidance rather than promising deterministic replay.)
 - KTD14. Keep fully autonomous execution as the default while preserving operator controls and exact approvals. (session-settled: user-directed — chosen over mandatory human-in-the-loop execution: Ground Control is an interruption and recovery layer, not a turn-by-turn gate.)
 - KTD15. Keep token budgets optional and advisory. (session-settled: user-directed — chosen over mandatory enforcement: usage can be missing or unpredictable and should become forecastable only from later verified history.)
+- KTD16. Implement v1 durability as a small GC-owned coordinator over the journal and deterministic reducers, not as an embedded agent SDK or external workflow service. Agent frameworks can contribute adapter-local conversation state, but they cannot own command retry, effect certainty, workspace restoration, or operator recovery truth. Do not introduce a generic workflow-engine trait, DAG authoring model, or second persistence authority until a second production implementation proves the need.
 
 The raw-store threat model is intentionally local-user scoped: restrictive file permissions and Keychain ACLs protect against casual access, but not a malicious unsandboxed same-UID process. Diagnostics and backups must exclude ciphertext unless explicitly requested and authorized.
 
@@ -314,6 +317,19 @@ docs/
 
 The existing small modules remain focused. Wire DTOs and the reusable local client belong in `gc-protocol`; SQLite, reducers, and collector-neutral domain types remain in `gc-core`; process supervision, provider adapters, policy, secrets, acceptance, and recovery belong in `gc-hostd`.
 
+### Durability Authority Boundary
+
+| Durability layer | V1 authority | Framework/runtime role |
+|---|---|---|
+| Conversation and provider session | Managed adapter, fingerprinted in the GC journal | May supply provider-native session or checkpoint data; never implies workspace or effect recovery |
+| Workflow step, timer, and retry eligibility | GC journal, reducer, and coordinator | No production dependency in v1 |
+| Process supervision and crash reconciliation | `gc-hostd` | Adapter reports runtime-specific evidence |
+| External effects and ambiguous dispatch | GC intent/effect ledger | Framework retry is disabled or ignored when GC cannot prove repeatability |
+| Workspace checkpoint and restore | GC Git worktree checkpoint | Outside an agent SDK's authority |
+| Operator approval, recovery brief, and action availability | GC broker protocol and evidence cursor | Framework human-in-the-loop state may be imported only as adapter evidence |
+
+LangGraph, OpenAI Agents SDK integrations, Microsoft Agent Framework with Durable Task, and Google ADK all validate useful patterns such as persisted sessions, checkpoints, pause/resume, and long-running waits. They do not replace the combined local process, workspace, effect-certainty, evidence, and operator-control contract above. A future adoption proposal must remain optional, local/offline-capable, versioned behind a bounded adapter, and pass the existing kill-point and privacy suite without adding a competing source of truth.
+
 ### Assumptions
 
 - The first production target is macOS 13 or newer; other platforms may retain observer-only builds until a service lifecycle is defined.
@@ -357,6 +373,7 @@ Each U-ID is intended to be a separate tracker item and implementation context. 
 - U10 must choose the smallest maintainable Rust/Objective-C or Swift ServiceManagement bridge after proving Tauri bundle layout and signing behavior.
 - U5 must prove the installed App Server's provider/profile override and exact-turn fork behavior. A process pool is deferred; v1 uses one supervised App Server process per attempt.
 - U7 may tune checkpoint size limits and phase-specific interruption deadlines from fixture and stress results, but must preserve the safety semantics in R17-R24.
+- Reconsidering a durability SDK or workflow runtime is a post-v1 architecture decision, not an implementation-package prerequisite. The proposal must compare at least GC-native behavior and one candidate in an isolated prototype, map every durability layer in the authority table, measure local packaging and restart overhead, and prove that runtime retries cannot bypass GC's dispatch/effect quarantine. Prototype dependencies do not enter production manifests unless that decision is explicitly approved.
 
 ---
 
@@ -529,17 +546,18 @@ Each U-ID is intended to be a separate tracker item and implementation context. 
 ### U6. Implement the minimal managed lifecycle and workspace seed
 
 - **Goal:** Prove the headless managed work loop through create, launch, inspect, follow, control, and isolated initial workspace creation.
-- **Requirements:** R9-R13, R22, R27; F1-F3; AE1-AE5.
+- **Requirements:** R9-R13, R22, R27, R36; F1-F3; AE1-AE5, AE15.
 - **Dependencies:** U5.
 - **Files:**
   - Create `crates/gc-core/migrations/0004_work_units.sql`.
   - Create `crates/gc-hostd/src/work_units.rs`.
+  - Create `crates/gc-hostd/src/coordinator.rs`.
   - Create `crates/gc-hostd/src/commands.rs`.
   - Create `crates/gc-hostd/src/workspace_seed.rs`.
   - Create `crates/gc-hostd/tests/managed_lifecycle.rs`.
   - Create `crates/gc-hostd/tests/workspace_seed.rs`.
   - Modify `crates/gc-cli/src/main.rs`, `crates/gc-protocol/src/message.rs`, `crates/gc-core/src/domain.rs`, and relevant Cargo manifests.
-- **Approach:** Add work-unit and attempt state machines, exact command intents, independent turn/attempt terminal states, and CLI operations for create, launch, inspect, follow, steer, interrupt, cancel, and approve. Create the initial isolated worktree from a verified immutable seed without modifying the source checkout. Use the broker-issued child token with no operator authority. Keep acceptance, provider profile, and effect details as explicit unavailable states until U12 supplies them.
+- **Approach:** Add work-unit and attempt state machines, exact command intents, independent turn/attempt terminal states, and CLI operations for create, launch, inspect, follow, steer, interrupt, cancel, and approve. Implement a narrow durable coordinator whose pure transition decision consumes cursor-qualified state and an explicit clock, assigns stable workflow/step IDs, persists due times, and uses intent, dispatch-started, acknowledgement, and outcome events as an outbox/inbox boundary. On restart, rediscover eligible unstarted steps from the journal; never infer that a dispatch-started step is safe to repeat. Create the initial isolated worktree from a verified immutable seed without modifying the source checkout. Use the broker-issued child token with no operator authority. Keep acceptance, provider profile, and effect details as explicit unavailable states until U12 supplies them; do not add DAG authoring or an external workflow runtime.
 - **Execution note:** Complete the lifecycle through the CLI with a fake App Server before adding provider profiles or dashboard controls.
 - **Patterns to follow:** Keep command results and state transitions in the broker; the CLI remains a protocol client.
 - **Test scenarios:**
@@ -549,7 +567,10 @@ Each U-ID is intended to be a separate tracker item and implementation context. 
   - The managed child token cannot approve, steer, interrupt, retry, or inspect operator-only state; expiry, audience/attempt binding, replay rejection, and revocation occur at attempt termination and daemon restart.
   - Daemon/UI restart preserves the attempt identity and does not duplicate a command.
   - Runtime disconnects classify command certainty without claiming downstream provider acceptance.
-- **Verification:** A deterministic fake-provider scenario proves the minimal headless lifecycle, isolated workspace seed, child-token boundary, and UI-independent daemon ownership.
+  - A durable timer retains its original due time across daemon restart and fires its transition at most once.
+  - A crash after step eligibility but before dispatch resumes the same stable step; a crash after dispatch starts quarantines the step until acknowledgement or reconciliation evidence resolves it.
+  - Replaying the same journal and clock inputs produces the same pending-step decisions without consulting an agent SDK's state.
+- **Verification:** A deterministic fake-provider scenario proves the minimal headless lifecycle, isolated workspace seed, child-token boundary, durable timer/step recovery, conservative dispatch quarantine, and UI-independent daemon ownership.
 
 ### U12. Add provider profiles, secrets, evidence, effects, and acceptance
 
@@ -725,6 +746,8 @@ The broker integration suite must inject failures at these boundaries:
 | After journal append, before view update | View remains at prior applied cursor | Advertising a partially reduced snapshot |
 | After runtime acknowledgement, before outcome persistence | Attempt/effect is quarantined | Starting a duplicate action |
 | After recovery brief display, before confirmation | Evidence decision cursor becomes stale | Dispatching a stale recovery |
+| After a timer is persisted, before or while it becomes due | Original due transition remains eligible once after restart | Resetting the deadline or firing the transition twice |
+| After a step becomes eligible, before dispatch starts | Same stable step may resume from durable eligibility | Creating a second step identity or losing the scheduled work |
 
 ### Evidence Required for Package Acceptance
 
@@ -744,6 +767,7 @@ The broker integration suite must inject failures at these boundaries:
 - `gc-hostd` is the only writer and runtime owner; CLI and Tauri converge through one cursor-based protocol.
 - The menu app may quit or restart without ending managed work, and the per-user service has install, restart, update, disable, and uninstall evidence.
 - Managed Codex work supports launch, inspect, follow, steer, interrupt, cancel, exact approval, resume, acceptance, and capability/plugin inventory through both CLI and UI.
+- Durable workflow steps and timers are GC-owned, replay-deterministic, and restart-safe without making an agent SDK or external workflow service a second source of truth.
 - Provider interruptions distinguish not-sent, ambiguous, accepted, interrupted, completed, and provider-retrying states without blind replay.
 - Provider profiles use Keychain-backed secret references and only configured or explicitly enabled loopback candidates can enter fallback policy.
 - Every managed attempt uses an isolated worktree; completed-turn checkpoints bind conversation, workspace, journal, config, and effect state.
@@ -783,6 +807,7 @@ The broker integration suite must inject failures at these boundaries:
 | Storage or WAL fails after dispatch | External effect has no durable outcome record | Fail-closed new mutations, quarantine post-dispatch uncertainty, repair-before-reconcile gate |
 | macOS helper packaging differs from Tauri assumptions | Service cannot register, sign, update, or uninstall cleanly | Early U10 bundle proof, late U9 clean-account lifecycle matrix, keep manual daemon mode for development |
 | Optional usage is delayed or absent | Budget UI makes false claims | Nullable values with provenance/freshness; no enforcement in v1 |
+| GC-native durable coordination misses mature workflow-engine edge cases | Timers, cancellation, or restart decisions drift or duplicate work | Keep the coordinator narrow; use stable step IDs, explicit clock inputs, model-based reducer tests, and kill-point failpoints; revisit an external runtime only through the post-v1 adoption gate |
 
 ---
 
@@ -828,6 +853,10 @@ The broker integration suite must inject failures at these boundaries:
 - [SQLite write-ahead logging](https://sqlite.org/wal.html) supports one writer with concurrent local readers while preserving transactional state updates.
 - [Ollama model-list API](https://docs.ollama.com/api/tags) and [Ollama network configuration](https://docs.ollama.com/faq) define the loopback default and health/model inventory used only as a candidate check.
 - [LM Studio local server documentation](https://lmstudio.ai/docs/developer/core/server) defines its local server and configurable network exposure; candidate discovery does not imply fallback capability.
+- [LangGraph overview](https://docs.langchain.com/oss/python/langgraph/overview) documents durable execution, persistence, and human-in-the-loop patterns; these are design references rather than a v1 runtime dependency.
+- [OpenAI Agents SDK sessions](https://openai.github.io/openai-agents-python/sessions/), [serializable run state](https://openai.github.io/openai-agents-python/ref/run_state/), and [durable runtime integrations](https://openai.github.io/openai-agents-python/running_agents/) document persisted conversation state, approval resumption, and integrations with workflow engines; Ground Control still owns process, workspace, effect, and recovery semantics.
+- [Microsoft Agent Framework Durable Task integration](https://learn.microsoft.com/en-us/azure/durable-task/sdks/durable-agents-microsoft-agent-framework) documents durable sessions, checkpointing, long waits, and crash recovery, but introduces a workflow-runtime boundary that is outside the local Rust v1 architecture.
+- [Google ADK resumability](https://adk.dev/runtime/resume/) documents resumable workflows for long-running functions, confirmation, and authentication; its state remains adapter evidence rather than Ground Control's durability authority.
 
 ---
 
