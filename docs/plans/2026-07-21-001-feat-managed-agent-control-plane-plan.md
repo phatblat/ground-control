@@ -52,7 +52,7 @@ Service interruptions are especially costly. A request may fail before dispatch,
 ### Actors
 
 - A1. The operator creates work, configures policy, resolves approvals, and accepts recovery risk.
-- A2. `gc-hostd` owns runtimes, journal writes, current-state reduction, policy, and mutation authorization.
+- A2. `gc-brokerd` owns runtimes, journal writes, current-state reduction, policy, and mutation authorization.
 - A3. A managed runtime adapter translates provider-specific lifecycle and capability behavior.
 - A4. CLI and Tauri clients inspect state and issue authorized commands through one broker protocol.
 - A5. Read-only subscribers consume normalized, sensitivity-filtered state and evidence events.
@@ -63,7 +63,7 @@ Service interruptions are especially costly. A request may fail before dispatch,
 **Authority, data, and migration**
 
 - R1. Ground Control must distinguish managed, cooperative, and observed sessions without presenting observed PIDs as controllable.
-- R2. `gc-hostd` must be the sole owner of journal writes, runtime processes, source cursors, current-state updates, and mutating controls.
+- R2. `gc-brokerd` must be the sole owner of journal writes, runtime processes, source cursors, current-state updates, and mutating controls.
 - R3. A new authoritative SQLite database must store an append-only application journal and rebuildable current-state views through ordered, transactional migrations; the legacy `index.db` remains a disposable read-only import source until explicit retirement.
 - R4. Each immutable event must carry a monotonic journal sequence, registered payload schema version, provider/source identity, correlation and causation IDs, sensitivity, and source/observed/persisted timestamps; event changes append new events and reducers expose their version.
 - R5. Default protocol DTOs must be explicit metadata/evidence-summary allowlists. V1 exposes no client operation for raw frames, full messages, tool arguments, patches, or receipts; unavoidable managed-runtime raw content remains in a broker-internal store after credential redaction.
@@ -111,7 +111,7 @@ Service interruptions are especially costly. A request may fail before dispatch,
 
 - R31. Legacy Claude ingestion must honor `CLAUDE_CONFIG_DIR`, preserve deterministic identities, handle complete byte-delimited records, expose parse/version errors, reconcile deletions, and filter before pagination.
 - R32. Tauri must allow only bundled origins, deny unapproved navigation/windows, validate bounded typed payloads again in Rust, and expose a minimal least-privilege bridge with no broad shell plugin. Approval decisions bind the exact displayed action hash and revision.
-- R33. The macOS app must register a per-user `gc-hostd` LaunchAgent while reporting a containment state. A Unix socket and peer UID do not defend against malicious unsandboxed same-user code; broad-access runtime mode requires explicit acknowledgement.
+- R33. The macOS app must register the `gc-brokerd` executable as the per-user LaunchAgent labeled `at.phatbl.ground-control.brokerd` while reporting a containment state. A Unix socket and peer UID do not defend against malicious unsandboxed same-user code; broad-access runtime mode requires explicit acknowledgement.
 - R34. Scrubbed fixture replay, golden wire vectors, model-based reducer/state-machine tests, fake App Server integration, migration/import tests, durable failpoints, crash recovery, CLI protocol tests, frontend tests, and CI must cover all high-risk state transitions.
 
 ### Key Flows
@@ -203,7 +203,7 @@ Service interruptions are especially costly. A request may fail before dispatch,
 - KTD1. Use `ground-control.db` as a new authoritative SQLite database beside the disposable legacy `index.db`, with an application-bootstrapped migration ledger, ordered migrations, WAL mode, an immutable journal, and rebuildable versioned views. A document database would add another service without removing the need for transactions, cursors, migrations, or local packaging.
 - KTD2. V1 exposes only explicit metadata/evidence-summary DTOs. Retained Claude source files are referenced by hash rather than duplicated; unavoidable managed-runtime raw content is stored broker-internally after redaction, encrypted at rest with a per-user Keychain-managed key, and has no client query operation. Key loss makes raw records unreadable without blocking redacted state; rotation re-encrypts or tombstones them, and purge removes ciphertext and key material together. (session-settled: user-directed — chosen over raw event publication: retained raw data is private until an explicit sharing model exists.)
 - KTD3. Call reduced data a “current-state view” and always qualify it with cursor and freshness. Source, observation, persistence, and render latency affect freshness, but event delay does not make the reduced state conceptually different from “now.”
-- KTD4. Run `gc-hostd` as a per-user LaunchAgent and keep Tauri and CLI as clients. A menu-bar-only broker dies with the UI, while a conventional per-client XPC service does not provide the required independent lifecycle.
+- KTD4. Run `gc-brokerd` as a per-user LaunchAgent and keep Tauri and CLI as clients. A menu-bar-only broker dies with the UI, while a conventional per-client XPC service does not provide the required independent lifecycle.
 - KTD5. Start with a versioned private Unix-domain socket using peer-UID checks, broker-derived principals, scoped idempotency, optimistic revisions, explicit DTO allowlists, snapshot/follow APIs, and short-lived audience-bound per-attempt child tokens with replay-resistant sequence and revocation. XPC code identity is deferred because the v1 threat model does not claim hard isolation from unsandboxed same-UID code.
 - KTD6. Treat Codex App Server as a real but versioned adapter surface and supervise one App Server process per attempt in v1. Use live initialization, thread/turn lifecycle, approvals, usage, provider capabilities, plugin inventory, and retry evidence instead of assuming behavior from a product version catalog.
 - KTD7. Keep plugin negotiation read-only in the first slice. (session-settled: user-approved — chosen over automatic plugin installation: Ground Control should detect and propose prerequisites while installation remains explicit and provider- or Gantry-delegated.)
@@ -223,7 +223,7 @@ The raw-store threat model is intentionally local-user scoped: restrictive file 
 
 ```mermaid
 flowchart TB
-  UI[Tauri menu app] -->|versioned commands and snapshots| Broker[gc-hostd LaunchAgent]
+  UI[Tauri menu app] -->|versioned commands and snapshots| Broker[gc-brokerd LaunchAgent]
   CLI[gc CLI] -->|same protocol| Broker
   Reader[Metadata subscriber] -->|snapshot plus normalized follow| Broker
   Broker --> Journal[(SQLite journal)]
@@ -295,7 +295,7 @@ crates/
   gc-protocol/
     src/
     tests/
-  gc-hostd/
+  gc-brokerd/
     src/
       adapters/
       ipc/
@@ -315,7 +315,7 @@ docs/
   plans/
 ```
 
-The existing small modules remain focused. Wire DTOs and the reusable local client belong in `gc-protocol`; SQLite, reducers, and collector-neutral domain types remain in `gc-core`; process supervision, provider adapters, policy, secrets, acceptance, and recovery belong in `gc-hostd`.
+The existing small modules remain focused. Wire DTOs and the reusable local client belong in `gc-protocol`; SQLite, reducers, and collector-neutral domain types remain in `gc-core`; process supervision, provider adapters, policy, secrets, acceptance, and recovery belong in `gc-brokerd`.
 
 ### Durability Authority Boundary
 
@@ -323,7 +323,7 @@ The existing small modules remain focused. Wire DTOs and the reusable local clie
 |---|---|---|
 | Conversation and provider session | Managed adapter, fingerprinted in the GC journal | May supply provider-native session or checkpoint data; never implies workspace or effect recovery |
 | Workflow step, timer, and retry eligibility | GC journal, reducer, and coordinator | No production dependency in v1 |
-| Process supervision and crash reconciliation | `gc-hostd` | Adapter reports runtime-specific evidence |
+| Process supervision and crash reconciliation | `gc-brokerd` | Adapter reports runtime-specific evidence |
 | External effects and ambiguous dispatch | GC intent/effect ledger | Framework retry is disabled or ignored when GC cannot prove repeatability |
 | Workspace checkpoint and restore | GC Git worktree checkpoint | Outside an agent SDK's authority |
 | Operator approval, recovery brief, and action availability | GC broker protocol and evidence cursor | Framework human-in-the-loop state may be imported only as adapter evidence |
@@ -467,18 +467,18 @@ Each U-ID is intended to be a separate tracker item and implementation context. 
   - Create `crates/gc-protocol/src/client.rs`.
   - Create `crates/gc-protocol/src/message.rs`.
   - Create `crates/gc-protocol/tests/compatibility.rs`.
-  - Create `crates/gc-hostd/Cargo.toml`.
-  - Create `crates/gc-hostd/src/main.rs`.
-  - Create `crates/gc-hostd/src/config.rs`.
-  - Create `crates/gc-hostd/src/ipc/mod.rs`.
-  - Create `crates/gc-hostd/src/ipc/server.rs`.
-  - Create `crates/gc-hostd/src/reconcile.rs`.
-  - Create `crates/gc-hostd/tests/broker_protocol.rs`.
-  - Create `crates/gc-hostd/tests/broker_restart.rs`.
+  - Create `crates/gc-brokerd/Cargo.toml`.
+  - Create `crates/gc-brokerd/src/main.rs`.
+  - Create `crates/gc-brokerd/src/config.rs`.
+  - Create `crates/gc-brokerd/src/ipc/mod.rs`.
+  - Create `crates/gc-brokerd/src/ipc/server.rs`.
+  - Create `crates/gc-brokerd/src/reconcile.rs`.
+  - Create `crates/gc-brokerd/tests/broker_protocol.rs`.
+  - Create `crates/gc-brokerd/tests/broker_restart.rs`.
   - Modify `Cargo.toml`, `crates/gc-cli/Cargo.toml`, and `crates/gc-cli/src/main.rs`.
-- **Approach:** Use a user-private runtime directory, a `0600` Unix socket, peer-UID checks, broker-derived principals, version handshake, request IDs, bounded frames and decode deadlines, scoped idempotency, expected revisions, and typed errors. Guard startup with an atomic per-user lock/lease tied to the socket owner; recover stale endpoints only after proving the owner is gone, coordinate handoff between manual and LaunchAgent modes, and let LaunchAgent throttle repeated crashes while recording diagnostics. Keep `gc-protocol` limited to versioned wire DTOs, handshake/errors, redacted subscription envelopes, and the reusable client; it must not expose SQLite rows, reducer internals, adapter frames, or raw/content payloads, and `gc-core` must not depend on it. Implement snapshot-at-view-cursor followed by inclusive journal sequences; clients deduplicate and resnapshot on protocol, reducer, or cursor errors. Move watcher and SQLite ownership into `gc-hostd`; clients never fall back to direct writes when the daemon is unavailable. Persist owned process identity before reporting launch success and reconcile nonterminal work after restart. Older same-major clients may read compatible snapshots; unknown mutation semantics are refused.
+- **Approach:** Use a user-private runtime directory, a `0600` Unix socket, peer-UID checks, broker-derived principals, version handshake, request IDs, bounded frames and decode deadlines, scoped idempotency, expected revisions, and typed errors. Guard startup with an atomic per-user lock/lease tied to the socket owner; recover stale endpoints only after proving the owner is gone, coordinate handoff between manual and LaunchAgent modes, and let LaunchAgent throttle repeated crashes while recording diagnostics. Keep `gc-protocol` limited to versioned wire DTOs, handshake/errors, redacted subscription envelopes, and the reusable client; it must not expose SQLite rows, reducer internals, adapter frames, or raw/content payloads, and `gc-core` must not depend on it. Implement snapshot-at-view-cursor followed by inclusive journal sequences; clients deduplicate and resnapshot on protocol, reducer, or cursor errors. Move watcher and SQLite ownership into `gc-brokerd`; clients never fall back to direct writes when the daemon is unavailable. Persist owned process identity before reporting launch success and reconcile nonterminal work after restart. Older same-major clients may read compatible snapshots; unknown mutation semantics are refused.
 - **Execution note:** Prove the socket protocol and daemon-only write invariant with a manual daemon and CLI before changing Tauri.
-- **Patterns to follow:** Keep serialization types in `gc-protocol`, business state in `gc-core`, and process supervision in `gc-hostd`.
+- **Patterns to follow:** Keep serialization types in `gc-protocol`, business state in `gc-core`, and process supervision in `gc-brokerd`.
 - **Test scenarios:**
   - A write lands between snapshot and follow and the client receives it exactly once after deduplication.
   - A disconnected client resumes inclusively from its last sequence and converges.
@@ -500,7 +500,7 @@ Each U-ID is intended to be a separate tracker item and implementation context. 
 - **Files:**
   - Create `src-tauri/src/broker.rs`.
   - Create `src-tauri/src/service.rs`.
-  - Create `src-tauri/macos/com.phatblat.ground-control.hostd.plist`.
+  - Create `src-tauri/macos/at.phatbl.ground-control.brokerd.plist`.
   - Modify `src-tauri/Cargo.toml`, `src-tauri/src/lib.rs`, `src-tauri/tauri.conf.json`, and `src-tauri/capabilities/default.json`.
   - Create `src-tauri/tests/broker_client.rs`.
 - **Approach:** Replace direct watcher, SQLite, and provider access with the shared broker client. Remove the broad shell plugin, allow only bundled origins and typed bounded commands, and keep all content escaped. Add a repeatable development bundle smoke harness for per-user ServiceManagement registration, UI quit independence, and restart reconciliation. Keep socket credentials and broker state outside managed worktrees, sanitize the child environment, and resolve the Codex executable from an explicit trusted path whose fingerprint is journaled.
@@ -519,15 +519,15 @@ Each U-ID is intended to be a separate tracker item and implementation context. 
 - **Requirements:** R13-R18, R23, R34; F1-F3; AE2-AE5, AE9, AE12.
 - **Dependencies:** U4.
 - **Files:**
-  - Create `crates/gc-hostd/src/adapters/mod.rs`.
-  - Create `crates/gc-hostd/src/adapters/codex.rs`.
-  - Create `crates/gc-hostd/src/capabilities.rs`.
-  - Create `crates/gc-hostd/src/supervisor.rs`.
-  - Create `crates/gc-hostd/tests/codex_adapter.rs`.
-  - Create `crates/gc-hostd/tests/capabilities.rs`.
-  - Create `crates/gc-hostd/tests/support/fake_codex_app_server.rs`.
-  - Create `crates/gc-hostd/tests/fixtures/codex/`.
-  - Modify `crates/gc-hostd/src/main.rs`, `crates/gc-core/src/domain.rs`, and `crates/gc-protocol/src/message.rs`.
+  - Create `crates/gc-brokerd/src/adapters/mod.rs`.
+  - Create `crates/gc-brokerd/src/adapters/codex.rs`.
+  - Create `crates/gc-brokerd/src/capabilities.rs`.
+  - Create `crates/gc-brokerd/src/supervisor.rs`.
+  - Create `crates/gc-brokerd/tests/codex_adapter.rs`.
+  - Create `crates/gc-brokerd/tests/capabilities.rs`.
+  - Create `crates/gc-brokerd/tests/support/fake_codex_app_server.rs`.
+  - Create `crates/gc-brokerd/tests/fixtures/codex/`.
+  - Modify `crates/gc-brokerd/src/main.rs`, `crates/gc-core/src/domain.rs`, and `crates/gc-protocol/src/message.rs`.
 - **Approach:** Start one supervised App Server process per attempt over its stable local transport, initialize it, persist process/thread/turn mappings, and translate request, notification, approval, usage, and error messages into provider-neutral events. Resolve capabilities from installed version plus live schema and methods such as provider capabilities, plugin inventory, and hooks. Prove that an effective provider/profile override is applied and verified without mutating global configuration, and prove whether the installed API can fork through the exact checkpoint turn before U6/U7 depend on either path. Store the capability snapshot on the attempt and revalidate action availability against current turn state. Keep runtime-command dispatch separate from downstream LLM-request phase; a stream disconnect is ambiguous, and elapsed silence never proves acceptance. Honor provider `willRetry` and expire connection-bound approvals after transport loss.
 - **Execution note:** Drive the adapter from a deterministic fake server before opting into a real installed-Codex smoke test.
 - **Patterns to follow:** Keep raw wire structs adapter-local and expose only canonical domain types across the adapter boundary. Unknown messages become versioned diagnostics, not panics or silent skips.
@@ -550,12 +550,12 @@ Each U-ID is intended to be a separate tracker item and implementation context. 
 - **Dependencies:** U5.
 - **Files:**
   - Create `crates/gc-core/migrations/0004_work_units.sql`.
-  - Create `crates/gc-hostd/src/work_units.rs`.
-  - Create `crates/gc-hostd/src/coordinator.rs`.
-  - Create `crates/gc-hostd/src/commands.rs`.
-  - Create `crates/gc-hostd/src/workspace_seed.rs`.
-  - Create `crates/gc-hostd/tests/managed_lifecycle.rs`.
-  - Create `crates/gc-hostd/tests/workspace_seed.rs`.
+  - Create `crates/gc-brokerd/src/work_units.rs`.
+  - Create `crates/gc-brokerd/src/coordinator.rs`.
+  - Create `crates/gc-brokerd/src/commands.rs`.
+  - Create `crates/gc-brokerd/src/workspace_seed.rs`.
+  - Create `crates/gc-brokerd/tests/managed_lifecycle.rs`.
+  - Create `crates/gc-brokerd/tests/workspace_seed.rs`.
   - Modify `crates/gc-cli/src/main.rs`, `crates/gc-protocol/src/message.rs`, `crates/gc-core/src/domain.rs`, and relevant Cargo manifests.
 - **Approach:** Add work-unit and attempt state machines, exact command intents, independent turn/attempt terminal states, and CLI operations for create, launch, inspect, follow, steer, interrupt, cancel, and approve. Implement a narrow durable coordinator whose pure transition decision consumes cursor-qualified state and an explicit clock, assigns stable workflow/step IDs, persists due times, and uses intent, dispatch-started, acknowledgement, and outcome events as an outbox/inbox boundary. On restart, rediscover eligible unstarted steps from the journal; never infer that a dispatch-started step is safe to repeat. Create the initial isolated worktree from a verified immutable seed without modifying the source checkout. Use the broker-issued child token with no operator authority. Keep acceptance, provider profile, and effect details as explicit unavailable states until U12 supplies them; do not add DAG authoring or an external workflow runtime.
 - **Execution note:** Complete the lifecycle through the CLI with a fake App Server before adding provider profiles or dashboard controls.
@@ -579,14 +579,14 @@ Each U-ID is intended to be a separate tracker item and implementation context. 
 - **Dependencies:** U6.
 - **Files:**
   - Create `crates/gc-core/migrations/0005_evidence_acceptance.sql`.
-  - Create `crates/gc-hostd/src/providers.rs`.
-  - Create `crates/gc-hostd/src/secrets.rs`.
-  - Create `crates/gc-hostd/src/evidence.rs`.
-  - Create `crates/gc-hostd/src/effects.rs`.
-  - Create `crates/gc-hostd/src/acceptance.rs`.
-  - Create `crates/gc-hostd/tests/provider_profiles.rs`.
-  - Create `crates/gc-hostd/tests/acceptance.rs`.
-  - Create `crates/gc-hostd/tests/effect_failpoints.rs`.
+  - Create `crates/gc-brokerd/src/providers.rs`.
+  - Create `crates/gc-brokerd/src/secrets.rs`.
+  - Create `crates/gc-brokerd/src/evidence.rs`.
+  - Create `crates/gc-brokerd/src/effects.rs`.
+  - Create `crates/gc-brokerd/src/acceptance.rs`.
+  - Create `crates/gc-brokerd/tests/provider_profiles.rs`.
+  - Create `crates/gc-brokerd/tests/acceptance.rs`.
+  - Create `crates/gc-brokerd/tests/effect_failpoints.rs`.
   - Modify `crates/gc-cli/src/main.rs`, `crates/gc-protocol/src/message.rs`, `crates/gc-core/src/domain.rs`, and relevant Cargo manifests.
 - **Approach:** Add CLI/API operations for provider profile list/add/validate/enable/rotate/revoke/status and acceptance-definition create/revise/display/enable. Store non-secret profiles in versioned local config and credentials only by origin-bound Keychain reference. Pin approved destination addresses per request/session, reject URL user-info, cross-origin redirects, link-local/metadata ranges unless explicitly allowed, and non-loopback TLS bypass; bound probes and never forward cloud credentials to Ollama or LM Studio. Add the foundational intent-first effect ledger before provider or acceptance dispatch. Capture evidence envelopes with scope, kind, status, source, timestamps, hash, and sensitivity. Acceptance definitions are operator-authored outside mutable repository content and carry a revision/hash; automatic execution requires an OS-level sandbox/profile with closed descriptors, no network/Keychain/broker access, executable and realpath-beneath checks, worktree-only writes, and per-check wall-clock, CPU, memory, process-count, output, and disk quotas with descendant cleanup on cancellation. Limit violations become evidence and fail the check. If that proof is unavailable, acceptance stays operator-triggered and potentially side-effecting. Expose private storage size/health and explicit stop-and-purge with audit tombstones; storage failure blocks new dispatch.
 - **Test scenarios:**
@@ -606,14 +606,14 @@ Each U-ID is intended to be a separate tracker item and implementation context. 
 - **Dependencies:** U12.
 - **Files:**
   - Create `crates/gc-core/migrations/0006_recovery.sql`.
-  - Create `crates/gc-hostd/src/workspace.rs`.
-  - Create `crates/gc-hostd/src/checkpoint.rs`.
-  - Create `crates/gc-hostd/src/effects.rs`.
-  - Create `crates/gc-hostd/src/recovery.rs`.
-  - Create `crates/gc-hostd/src/recovery_brief.rs`.
-  - Create `crates/gc-hostd/src/fallback.rs`.
-  - Create `crates/gc-hostd/tests/checkpoint_recovery.rs`.
-  - Create `crates/gc-hostd/tests/fallback_policy.rs`.
+  - Create `crates/gc-brokerd/src/workspace.rs`.
+  - Create `crates/gc-brokerd/src/checkpoint.rs`.
+  - Create `crates/gc-brokerd/src/effects.rs`.
+  - Create `crates/gc-brokerd/src/recovery.rs`.
+  - Create `crates/gc-brokerd/src/recovery_brief.rs`.
+  - Create `crates/gc-brokerd/src/fallback.rs`.
+  - Create `crates/gc-brokerd/tests/checkpoint_recovery.rs`.
+  - Create `crates/gc-brokerd/tests/fallback_policy.rs`.
   - Modify `crates/gc-cli/src/main.rs`, `crates/gc-protocol/src/message.rs`, and `crates/gc-core/src/domain.rs`.
 - **Approach:** Checkpoint only quiescent completed-turn boundaries. Bind each checkpoint to base commit, Git common directory, worktree identity, tracked diff hash, bounded untracked manifest/hash, runtime/config/instruction fingerprint, provider turn, applied journal cursor/reducer generation, and effect revision. Mark ignored, oversized, nested, submodule, LFS, and non-Git states non-restorable unless explicitly supported. Resume the same thread only after full reconciliation. Retry restores a new worktree, verifies the checkpoint fingerprint and latest evidence decision cursor before model invocation, forks same-provider Codex through the checkpoint turn only when U5 proved support, and submits a deterministic brief containing structured verified facts. Alternate-provider fallback starts a new conversation with sensitivity-filtered checkpoint context and never calls itself a fork or continuation. Untrusted partial model output is referenced by hash/summary unless the operator opts in. Require explicit operator acknowledgement for unknown/irreversible effects. Fallback uses the new-attempt path only after native retry ends, policy selects an enabled compatible target, and the checkpoint is safe.
 - **Execution note:** Build checkpoint/restore and failure injection tests before enabling the retry or fallback commands.
@@ -689,12 +689,12 @@ Each U-ID is intended to be a separate tracker item and implementation context. 
   - Modify `src-tauri/tauri.conf.json`.
   - Modify `src-tauri/capabilities/default.json`.
   - Modify `src-tauri/src/service.rs`.
-  - Modify `src-tauri/macos/com.phatblat.ground-control.hostd.plist`.
-  - Create `crates/gc-hostd/src/diagnostics.rs`.
-  - Create `crates/gc-hostd/tests/security_boundary.rs`.
+  - Modify `src-tauri/macos/at.phatbl.ground-control.brokerd.plist`.
+  - Create `crates/gc-brokerd/src/diagnostics.rs`.
+  - Create `crates/gc-brokerd/tests/security_boundary.rs`.
   - Create `docs/operations.md`.
   - Modify `.github/workflows/ci.yml`, `docs/spec.md`, and `README.md`.
-- **Approach:** Bundle and sign `gc-hostd`, register it with ServiceManagement, expose registration health and Login Items guidance, and define disable/uninstall behavior. Use broker/UI protocol negotiation during app updates; drain commands, persist intent, and reconcile nonterminal attempts after restart. Enforce private permissions for database, WAL/SHM, raw store, config, backups, and diagnostics; redaction and bounded logs; least-privilege Tauri permissions; bundled-origin navigation only; approval hashes; and no direct LAN listener. Document the trusted same-UID threat model, broad-access degradation, private-data locations, backup/retention posture, recovery limits, provider origin binding, acceptance isolation, and diagnostics. Keep Developer ID credentials outside the repository and make unsigned local packaging verifiable without them.
+- **Approach:** Bundle and sign `gc-brokerd`, register it with ServiceManagement, expose registration health and Login Items guidance, and define disable/uninstall behavior. Use broker/UI protocol negotiation during app updates; drain commands, persist intent, and reconcile nonterminal attempts after restart. Enforce private permissions for database, WAL/SHM, raw store, config, backups, and diagnostics; redaction and bounded logs; least-privilege Tauri permissions; bundled-origin navigation only; approval hashes; and no direct LAN listener. Document the trusted same-UID threat model, broad-access degradation, private-data locations, backup/retention posture, recovery limits, provider origin binding, acceptance isolation, and diagnostics. Keep Developer ID credentials outside the repository and make unsigned local packaging verifiable without them.
 - **Execution note:** Prefer install/update/uninstall smoke evidence on a clean macOS user account over unit tests for ServiceManagement behavior.
 - **Patterns to follow:** Follow the early U10 service proof and Tauri's existing bundle configuration; do not add root privileges or a LaunchDaemon.
 - **Test scenarios:**
@@ -725,7 +725,7 @@ Each U-ID is intended to be a separate tracker item and implementation context. 
 | Frontend type check | Tauri/Svelte/TypeScript change | `rtk npm run check` | Svelte and TypeScript report no errors |
 | Frontend tests | UI/store change after U8/U11 | `rtk npm run test` | Component, reconnect, privacy, approval, and recovery tests pass |
 | Frontend build | UI/bundle change | `rtk npm run build` | Production assets build |
-| Managed lifecycle | U5-U12 | `rtk cargo test -p gc-hostd --test managed_lifecycle` | Fake App Server lifecycle, evidence, failure, and recovery scenarios pass |
+| Managed lifecycle | U5-U12 | `rtk cargo test -p gc-brokerd --test managed_lifecycle` | Fake App Server lifecycle, evidence, failure, and recovery scenarios pass |
 | Full fixture replay | U3 onward | `rtk cargo test -p gc-core --test journal_replay` | Rebuilt views match expected semantic state |
 | macOS lifecycle smoke | U10 and U9 | Documented install smoke procedure | Service registration, UI independence, restart, and cleanup evidence recorded |
 
@@ -764,7 +764,7 @@ The broker integration suite must inject failures at these boundaries:
 - The product docs describe managed, cooperative, and observed sessions and no longer define GC as observation-only.
 - Existing Claude indexing defects are covered by fixtures and fixed without inventing paths, identities, or historical events.
 - A new authoritative SQLite database bootstraps safely, imports the legacy index read-only with provenance, and the journal can deterministically rebuild versioned current-state views.
-- `gc-hostd` is the only writer and runtime owner; CLI and Tauri converge through one cursor-based protocol.
+- `gc-brokerd` is the only writer and runtime owner; CLI and Tauri converge through one cursor-based protocol.
 - The menu app may quit or restart without ending managed work, and the per-user service has install, restart, update, disable, and uninstall evidence.
 - Managed Codex work supports launch, inspect, follow, steer, interrupt, cancel, exact approval, resume, acceptance, and capability/plugin inventory through both CLI and UI.
 - Durable workflow steps and timers are GC-owned, replay-deterministic, and restart-safe without making an agent SDK or external workflow service a second source of truth.
