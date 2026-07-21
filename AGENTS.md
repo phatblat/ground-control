@@ -36,6 +36,11 @@ Rust is the primary tested surface. Add unit tests near the module under test or
 
 Recent history uses concise conventional-style subjects such as `feat: v0.2 live session monitoring`, `fix: include cache tokens in burn and list output`, and `docs: add project overview and usage to README`. Keep commits logically scoped and use lowercase prefixes like `feat:`, `fix:`, `docs:`, `chore:`, or `lock:`. PRs should include a summary, linked issue or plan, verification commands, and screenshots for visible Tauri/Svelte changes.
 
+## Project Tracking
+
+- Linear workspace: `LDG` (`https://linear.app/ldg`).
+- Linear team: `GC` — Ground Control. Use `GC` issue identifiers for Ground Control project work.
+
 ## Security & Configuration Tips
 
 Do not commit local Claude session data, generated indexes, secrets, or machine-specific paths. The SQLite index is derived cache data; rebuild it with `gc index` rather than versioning it.
