@@ -3,7 +3,6 @@ title: Managed Agent Control Plane - Plan
 type: feat
 date: 2026-07-21
 deepened: 2026-07-21
-origin: HANDOFF.md
 artifact_contract: ce-unified-plan/v1
 artifact_readiness: implementation-ready
 product_contract_source: ce-plan-bootstrap
@@ -15,7 +14,7 @@ execution: code
 ## Goal Capsule
 
 - **Objective:** Turn Ground Control from a Claude-only observer into a local control plane that can launch, monitor, control, recover, and verify managed Codex work while preserving the existing observation surface.
-- **Authority hierarchy:** Session-settled decisions in this plan override `HANDOFF.md`; this plan overrides the stale product boundary in `docs/spec.md`; runtime capability evidence overrides assumptions about an installed agent version.
+- **Authority hierarchy:** This plan overrides the stale product boundary in `docs/spec.md`; runtime capability evidence overrides assumptions about an installed agent version.
 - **Execution profile:** Deliver the work as separately tracked U-ID packages. Each package must leave the repository buildable and record its own acceptance evidence before a dependent package starts; protocol/daemon, Tauri service integration, read-only UI, and mutating UI controls remain separate contexts.
 - **Stop conditions:** Stop if a migration can destroy existing local data, if an adapter cannot distinguish a safe retry from an ambiguous dispatch, or if an implementation would present same-user workflow controls as a hard security boundary.
 - **Tail ownership:** The implementation owner carries each package through tests, documentation, and its tracker handoff. Production signing and notarization may require operator-provided Apple credentials, but the unsigned development proof remains part of the implementation.
@@ -74,7 +73,7 @@ Service interruptions are especially costly. A request may fail before dispatch,
 
 - R8. CLI and Tauri must use one size- and time-bounded broker protocol with snapshot-at-view-cursor, inclusive journal follow semantics, deduplication, connection quotas, bounded subscriber buffers, and explicit protocol, compatibility, degradation, or cursor errors.
 - R9. The broker must derive principal and role from the authenticated connection. Every mutation must include a client-generated idempotency key and expected state/attempt/turn revision, while idempotency results are scoped to principal, method, target, and request-body hash.
-- R10. The broker must separate metadata-reader, authorized-operator, and managed-child principals; it derives roles from authenticated connections, mints a short-lived audience-bound per-attempt child token with replay-resistant sequence and revocation, and keeps socket credentials and privileged descriptors outside worktrees and out of inherited runtime state.
+- R10. The broker must separate metadata-reader, authorized-operator, and managed-child principals and derive roles from authenticated connections. The first headless slice gives managed App Server children no broker access. A later feature that requires child access must first define an audience-bound credential, safe delivery, replay resistance, expiry, and revocation while keeping credentials and privileged descriptors outside worktrees and inherited runtime state.
 - R11. Autonomous execution must remain the default policy posture while exact runtime-raised approvals, steer, interrupt, cancel, resume, retry, and status inspection remain available to the operator.
 - R12. Work-unit cancellation must stop future scheduling, expire pending approvals, interrupt active work, supervise process exit, and retain uncertainty if acknowledgement is missing.
 
@@ -181,7 +180,7 @@ Service interruptions are especially costly. A request may fail before dispatch,
 **Included now**
 
 - Managed Codex launch, inspect, follow, steer, interrupt, cancel, exact manual approval, resume, same-host retry, evidence, acceptance, and capability/plugin inventory.
-- Existing Claude observation behind the broker, including the correctness work identified in `HANDOFF.md`.
+- Existing Claude observation behind the broker, including the correctness work enumerated in U2.
 - Configured provider profiles and candidate checks for loopback Ollama and LM Studio defaults.
 - A persistent macOS per-user broker, headless CLI parity, initial dashboard, and advisory token budgets.
 
@@ -367,11 +366,15 @@ Each U-ID is intended to be a separate tracker item and implementation context. 
 - Same-provider retry combines a Codex conversation fork with a separate verified worktree restore.
 - A successful turn without configured acceptance completes the attempt as claimed, not verified. Configured acceptance is required for the verified state.
 - Provider profiles and acceptance definitions are authored through the headless CLI/API in v1; the UI displays status, validation errors, and installation proposals but does not become a second configuration writer.
+- The U1-U6 vertical slice is headless and uses a manually started broker. Tauri cutover and the macOS LaunchAgent lifecycle belong to U10 and do not gate U6.
+- The operator endpoint is owner-only and grants operator authority from its private socket and peer UID; client-supplied role fields are never authoritative. Metadata-reader credentials and any managed-child credential are separate follow-on contracts.
+- The first managed launch uses the installed Codex default configuration only. It records the trusted executable path and fingerprint plus the resolved runtime, provider, model, and configuration fingerprint; Ground Control provider profiles and fallback remain unavailable until U12 and U7.
+- The first workspace seed accepts only a clean Git repository at an explicit commit. Dirty tracked files, untracked files, non-Git workspaces, submodules, and LFS content return typed unsupported states until the later recovery workspace contract is implemented.
 
 ### Deferred Implementation Decisions
 
 - U10 must choose the smallest maintainable Rust/Objective-C or Swift ServiceManagement bridge after proving Tauri bundle layout and signing behavior.
-- U5 must prove the installed App Server's provider/profile override and exact-turn fork behavior. A process pool is deferred; v1 uses one supervised App Server process per attempt.
+- U5 must probe the installed App Server's Codex model-provider/config-profile override and exact-turn fork behavior, then expose unsupported paths as disabled capabilities. A process pool is deferred; v1 uses one supervised App Server process per attempt.
 - U7 may tune checkpoint size limits and phase-specific interruption deadlines from fixture and stress results, but must preserve the safety semantics in R17-R24.
 - Reconsidering a durability SDK or workflow runtime is a post-v1 architecture decision, not an implementation-package prerequisite. The proposal must compare at least GC-native behavior and one candidate in an isolated prototype, map every durability layer in the authority table, measure local packaging and restart overhead, and prove that runtime retries cannot bypass GC's dispatch/effect quarantine. Prototype dependencies do not enter production manifests unless that decision is explicitly approved.
 
@@ -390,7 +393,7 @@ Each U-ID is intended to be a separate tracker item and implementation context. 
 - **Approach:** Rewrite the architecture, Ground Control/Gantry boundary, milestones, data authority, privacy posture, and non-goals. Keep Gantry responsible for agent configuration packages; allow Ground Control to own runtime provider profiles, policies, and explicit prerequisite proposals. Document fixture replay and current-state views in user language.
 - **Patterns to follow:** Keep the concise milestone and comparison style already used in `docs/spec.md`; remove claims that the parser is version-aware or milestones are incomplete when code proves otherwise.
 - **Test scenarios:** Test expectation: none — this package changes product documentation only. Review must confirm that no section still calls the database wholly rebuildable or remote control/replay a non-goal.
-- **Verification:** A reader can understand what GC controls, what it only observes, what data is private, and what the first managed slice includes without reading this plan or `HANDOFF.md`.
+- **Verification:** A reader can understand what GC controls, what it only observes, what data is private, and what the first managed slice includes from the durable product documentation alone.
 
 ### U2. Establish the legacy correctness and verification baseline
 
@@ -425,7 +428,7 @@ Each U-ID is intended to be a separate tracker item and implementation context. 
 
 - **Goal:** Establish the durable data model, migration engine, reducer contract, and fixture replay foundation that every managed feature uses.
 - **Requirements:** R1-R7, R17, R25-R27, R34; F3, F5, F6; AE3, AE9-AE11.
-- **Dependencies:** U1.
+- **Dependencies:** U1, U2.
 - **Files:**
   - Create `crates/gc-core/migrations/bootstrap_current_schema.sql`.
   - Create `crates/gc-core/migrations/0001_event_registry.sql`.
@@ -440,7 +443,7 @@ Each U-ID is intended to be a separate tracker item and implementation context. 
   - Create `crates/gc-core/tests/journal_replay.rs`.
   - Create `crates/gc-core/tests/fixtures/canonical/`.
   - Modify `crates/gc-core/src/lib.rs`, `crates/gc-core/src/store.rs`, and `crates/gc-core/Cargo.toml`.
-- **Approach:** Bootstrap the migration ledger only after validating the known current legacy schema, then create a new authoritative database path and import `index.db` read-only as deterministic legacy snapshots or rebuild from source. Separate canonical envelopes from broker-internal raw payload/content storage. Atomically append canonical events, update materialized current-state tables, and advance source cursors. Register immutable event types and payload versions, upcast supported historical versions, record reducer generation, and stop materialization at an unsupported future event rather than skipping it. Rebuild views into a replacement generation and swap the advertised applied cursor atomically. Keep source, journal, view, and subscriber cursors distinct; snapshots read all view tables at one applied cursor.
+- **Approach:** Bootstrap the migration ledger only after validating the known current legacy schema, then create a new authoritative database path and import `index.db` read-only as deterministic legacy snapshots. Rebuilding from retained source is an explicit recovery path, not an alternative migration implementation. Separate canonical envelopes from broker-internal raw payload/content storage. Atomically append canonical events, update materialized current-state tables, and advance source cursors. Register immutable event types and payload versions, upcast supported historical versions, record reducer generation, and stop materialization at an unsupported future event rather than skipping it. Rebuild views into a replacement generation and swap the advertised applied cursor atomically. Keep source, journal, view, and subscriber cursors distinct; snapshots read all view tables at one applied cursor.
 - **Execution note:** Implement journal append and reducer behavior test-first, then run upgrade tests against a copy of the current schema.
 - **Patterns to follow:** Extend the existing bundled SQLite dependency rather than introducing an ORM or external broker. Keep SQL in numbered files and Rust types provider-neutral.
 - **Test scenarios:**
@@ -459,7 +462,7 @@ Each U-ID is intended to be a separate tracker item and implementation context. 
 ### U4. Establish the protocol and manual daemon authority
 
 - **Goal:** Add the persistent process boundary, shared wire protocol, headless client, and crash reconciliation skeleton before any Tauri or managed-runtime integration.
-- **Requirements:** R2, R7-R12, R32-R34; F2, F6; AE1, AE2.
+- **Requirements:** R2, R7-R12, R34; F2, F6; AE2.
 - **Dependencies:** U2, U3.
 - **Files:**
   - Create `crates/gc-protocol/Cargo.toml`.
@@ -476,7 +479,7 @@ Each U-ID is intended to be a separate tracker item and implementation context. 
   - Create `crates/gc-brokerd/tests/broker_protocol.rs`.
   - Create `crates/gc-brokerd/tests/broker_restart.rs`.
   - Modify `Cargo.toml`, `crates/gc-cli/Cargo.toml`, and `crates/gc-cli/src/main.rs`.
-- **Approach:** Use a user-private runtime directory, a `0600` Unix socket, peer-UID checks, broker-derived principals, version handshake, request IDs, bounded frames and decode deadlines, scoped idempotency, expected revisions, and typed errors. Guard startup with an atomic per-user lock/lease tied to the socket owner; recover stale endpoints only after proving the owner is gone, coordinate handoff between manual and LaunchAgent modes, and let LaunchAgent throttle repeated crashes while recording diagnostics. Keep `gc-protocol` limited to versioned wire DTOs, handshake/errors, redacted subscription envelopes, and the reusable client; it must not expose SQLite rows, reducer internals, adapter frames, or raw/content payloads, and `gc-core` must not depend on it. Implement snapshot-at-view-cursor followed by inclusive journal sequences; clients deduplicate and resnapshot on protocol, reducer, or cursor errors. Move watcher and SQLite ownership into `gc-brokerd`; clients never fall back to direct writes when the daemon is unavailable. Persist owned process identity before reporting launch success and reconcile nonterminal work after restart. Older same-major clients may read compatible snapshots; unknown mutation semantics are refused.
+- **Approach:** Use an owner-private runtime directory and operator socket, `0600` socket permissions, peer-UID checks, broker-derived operator authority, version handshake, request IDs, bounded frames and decode deadlines, scoped idempotency, expected revisions, and typed errors. Client-supplied roles are ignored or rejected; metadata-reader credentials are a separate scoped contract, and managed children have no broker connection in this slice. Guard startup with an atomic per-user lock/lease tied to the socket owner and recover stale endpoints only after proving the owner is gone. Keep LaunchAgent handoff, throttling, and ServiceManagement integration in U10. Keep `gc-protocol` limited to versioned wire DTOs, handshake/errors, redacted subscription envelopes, and the reusable client; it must not expose SQLite rows, reducer internals, adapter frames, or raw/content payloads, and `gc-core` must not depend on it. Implement snapshot-at-view-cursor followed by inclusive journal sequences; clients deduplicate and resnapshot on protocol, reducer, or cursor errors. Move watcher and SQLite ownership into `gc-brokerd`; clients never fall back to direct writes when the daemon is unavailable. Persist owned process identity before reporting launch success and reconcile nonterminal work after restart. Older same-major clients may read compatible snapshots; unknown mutation semantics are refused.
 - **Execution note:** Prove the socket protocol and daemon-only write invariant with a manual daemon and CLI before changing Tauri.
 - **Patterns to follow:** Keep serialization types in `gc-protocol`, business state in `gc-core`, and process supervision in `gc-brokerd`.
 - **Test scenarios:**
@@ -486,7 +489,7 @@ Each U-ID is intended to be a separate tracker item and implementation context. 
   - Duplicate mutation IDs return the original result and do not repeat a side effect.
   - Competing clients with stale revisions receive a typed conflict.
   - Spoofed role fields are ignored or rejected because principal is derived from the connection; cross-principal idempotency-key reuse cannot retrieve a result.
-  - Metadata-reader and managed-child connections cannot issue operator mutations or inspect operator-only state.
+  - Metadata-reader connections cannot issue operator mutations or inspect operator-only state; managed children receive no broker endpoint or credential in this slice.
   - Oversized, truncated, malformed, slow, or excessive connections are bounded without starving a live attempt.
   - Daemon absence or protocol mismatch produces a diagnostic state; CLI does not open SQLite for writes.
   - Daemon restart classifies recorded child processes as reconnectable, interrupted, orphaned, or outcome-unknown without trusting PID alone.
@@ -503,7 +506,7 @@ Each U-ID is intended to be a separate tracker item and implementation context. 
   - Create `src-tauri/macos/at.phatbl.ground-control.brokerd.plist`.
   - Modify `src-tauri/Cargo.toml`, `src-tauri/src/lib.rs`, `src-tauri/tauri.conf.json`, and `src-tauri/capabilities/default.json`.
   - Create `src-tauri/tests/broker_client.rs`.
-- **Approach:** Replace direct watcher, SQLite, and provider access with the shared broker client. Remove the broad shell plugin, allow only bundled origins and typed bounded commands, and keep all content escaped. Add a repeatable development bundle smoke harness for per-user ServiceManagement registration, UI quit independence, and restart reconciliation. Keep socket credentials and broker state outside managed worktrees, sanitize the child environment, and resolve the Codex executable from an explicit trusted path whose fingerprint is journaled.
+- **Approach:** Replace direct watcher, SQLite, and provider access with the shared broker client. Remove the broad shell plugin, allow only bundled origins and typed bounded commands, and keep all content escaped. Add a repeatable development bundle smoke harness for per-user ServiceManagement registration, UI quit independence, and restart reconciliation. Keep socket credentials and broker state outside managed worktrees, sanitize the child environment, and reuse U5's trusted Codex executable resolver and journaled fingerprint.
 - **Patterns to follow:** Keep Tauri commands as a presentation bridge; the broker protocol remains the only state and mutation authority.
 - **Test scenarios:**
   - UI startup and reconnect converge to the same snapshot as the CLI.
@@ -516,7 +519,7 @@ Each U-ID is intended to be a separate tracker item and implementation context. 
 ### U5. Add the managed Codex adapter and live capability resolution
 
 - **Goal:** Supervise the installed Codex App Server, map its identities and lifecycle into canonical events, and expose truthful per-attempt capabilities.
-- **Requirements:** R13-R18, R23, R34; F1-F3; AE2-AE5, AE9, AE12.
+- **Requirements:** R13-R18, R23, R34; F1-F3. This package proves only the runtime-command/provider-certainty clauses of AE3-AE5; fallback and recovery completion remain in U7.
 - **Dependencies:** U4.
 - **Files:**
   - Create `crates/gc-brokerd/src/adapters/mod.rs`.
@@ -528,7 +531,7 @@ Each U-ID is intended to be a separate tracker item and implementation context. 
   - Create `crates/gc-brokerd/tests/support/fake_codex_app_server.rs`.
   - Create `crates/gc-brokerd/tests/fixtures/codex/`.
   - Modify `crates/gc-brokerd/src/main.rs`, `crates/gc-core/src/domain.rs`, and `crates/gc-protocol/src/message.rs`.
-- **Approach:** Start one supervised App Server process per attempt over its stable local transport, initialize it, persist process/thread/turn mappings, and translate request, notification, approval, usage, and error messages into provider-neutral events. Resolve capabilities from installed version plus live schema and methods such as provider capabilities, plugin inventory, and hooks. Prove that an effective provider/profile override is applied and verified without mutating global configuration, and prove whether the installed API can fork through the exact checkpoint turn before U6/U7 depend on either path. Store the capability snapshot on the attempt and revalidate action availability against current turn state. Keep runtime-command dispatch separate from downstream LLM-request phase; a stream disconnect is ambiguous, and elapsed silence never proves acceptance. Honor provider `willRetry` and expire connection-bound approvals after transport loss.
+- **Approach:** Resolve the installed Codex executable from an explicit trusted absolute path outside the worktree, validate it before launch, and journal its version and fingerprint. Start one supervised App Server process per synthetic adapter-test attempt over its stable local transport, initialize it, persist process/thread/turn mappings, and translate request, notification, approval, usage, and error messages into provider-neutral events; U6 owns durable attempt creation. Use the installed Codex default configuration for the first slice and journal the resolved provider, model, and configuration fingerprint. Resolve capabilities from installed version plus live schema and methods such as provider capabilities, plugin inventory, and hooks. Probe Codex model-provider/config-profile override and exact-turn fork support without mutating global configuration, but keep GC provider profiles and fallback unavailable until U12 and U7. Store the capability snapshot on the attempt and revalidate action availability against current turn state. Keep runtime-command dispatch separate from downstream LLM-request phase; a stream disconnect is ambiguous, and elapsed silence never proves acceptance. Honor provider `willRetry` and expire connection-bound approvals after transport loss.
 - **Execution note:** Drive the adapter from a deterministic fake server before opting into a real installed-Codex smoke test.
 - **Patterns to follow:** Keep raw wire structs adapter-local and expose only canonical domain types across the adapter boundary. Unknown messages become versioned diagnostics, not panics or silent skips.
 - **Test scenarios:**
@@ -536,17 +539,16 @@ Each U-ID is intended to be a separate tracker item and implementation context. 
   - Missing methods or an unsupported installed version disable dependent actions with reasons while observation remains available.
   - Plugin and hook inventory changes invalidate the runtime/config fingerprint for later work and never trigger installation.
   - A stale turn ID prevents steering; an in-progress or non-steerable turn reports why.
-  - Runtime disconnect before a command reaches App Server is `not_sent`; after App Server accepts the command but before downstream evidence is available, state is `outcome_unknown`; disconnect during streaming is `interrupted`.
+  - Runtime disconnect before a command reaches App Server is `runtime_command_not_sent`; provider-level `not_sent` requires runtime/provider evidence. After App Server accepts the command but before downstream evidence is available, state is `outcome_unknown`; disconnect during streaming is `interrupted`.
   - `willRetry=true` suppresses GC fallback and `willRetry=false` permits policy evaluation.
   - Transport loss while approval is pending expires it and does not resend an approval decision after reconnect.
   - Daemon and per-attempt fake App Server restart independently and reconcile or classify the attempt without claiming unsupported reattachment.
-  - Two simultaneous daemon starts yield one owner; a stale socket is reclaimed only after owner proof, and repeated crashes enter LaunchAgent throttle with a diagnostic rather than a restart storm.
-- **Verification:** The adapter proves per-attempt process isolation, provider/profile override and exact-turn fork support or disables those paths, and runs the complete Codex lifecycle through fake fixtures with an opt-in installed-Codex smoke test.
+- **Verification:** The adapter proves per-attempt process isolation, reports Codex model-provider/config-profile override and exact-turn fork support or disables those paths, and runs the complete Codex lifecycle through fake fixtures with an opt-in installed-Codex smoke test.
 
 ### U6. Implement the minimal managed lifecycle and workspace seed
 
 - **Goal:** Prove the headless managed work loop through create, launch, inspect, follow, control, and isolated initial workspace creation.
-- **Requirements:** R9-R13, R22, R27, R36; F1-F3; AE1-AE5, AE15.
+- **Requirements:** R9-R13, R22, R27, R36; F1-F3; AE2 and AE15. This package consumes U5's command-certainty states but does not own fallback or recovery completion.
 - **Dependencies:** U5.
 - **Files:**
   - Create `crates/gc-core/migrations/0004_work_units.sql`.
@@ -557,15 +559,15 @@ Each U-ID is intended to be a separate tracker item and implementation context. 
   - Create `crates/gc-brokerd/tests/managed_lifecycle.rs`.
   - Create `crates/gc-brokerd/tests/workspace_seed.rs`.
   - Modify `crates/gc-cli/src/main.rs`, `crates/gc-protocol/src/message.rs`, `crates/gc-core/src/domain.rs`, and relevant Cargo manifests.
-- **Approach:** Add work-unit and attempt state machines, exact command intents, independent turn/attempt terminal states, and CLI operations for create, launch, inspect, follow, steer, interrupt, cancel, and approve. Implement a narrow durable coordinator whose pure transition decision consumes cursor-qualified state and an explicit clock, assigns stable workflow/step IDs, persists due times, and uses intent, dispatch-started, acknowledgement, and outcome events as an outbox/inbox boundary. On restart, rediscover eligible unstarted steps from the journal; never infer that a dispatch-started step is safe to repeat. Create the initial isolated worktree from a verified immutable seed without modifying the source checkout. Use the broker-issued child token with no operator authority. Keep acceptance, provider profile, and effect details as explicit unavailable states until U12 supplies them; do not add DAG authoring or an external workflow runtime.
+- **Approach:** Add work-unit and attempt state machines, exact command intents, independent turn/attempt terminal states, and CLI operations for create, launch, inspect, follow, steer, interrupt, cancel, and approve. Implement a narrow durable coordinator whose pure transition decision consumes cursor-qualified state and an explicit clock, assigns stable workflow/step IDs, persists due times, and uses intent, dispatch-started, acknowledgement, and outcome events as an outbox/inbox boundary. On restart, rediscover eligible unstarted steps from the journal; never infer that a dispatch-started step is safe to repeat. Create the initial isolated worktree from a clean Git repository at an explicit commit without modifying the source checkout. Return typed unsupported states for dirty tracked files, untracked files, non-Git workspaces, submodules, and LFS content. Launch with the installed Codex defaults resolved by U5; no GC provider profile or fallback is available in this slice. Managed App Server children receive no broker access or credential. Keep acceptance, provider profile, and effect details as explicit unavailable states until U12 supplies them; do not add DAG authoring or an external workflow runtime.
 - **Execution note:** Complete the lifecycle through the CLI with a fake App Server before adding provider profiles or dashboard controls.
 - **Patterns to follow:** Keep command results and state transitions in the broker; the CLI remains a protocol client.
 - **Test scenarios:**
   - The CLI completes create, launch, inspect, follow, steer, interrupt, exact approval, and cancel without Tauri.
   - Duplicate launch and stale control revisions are idempotent or typed conflicts.
   - The initial workspace seed creates an isolated worktree and leaves the source checkout unchanged.
-  - The managed child token cannot approve, steer, interrupt, retry, or inspect operator-only state; expiry, audience/attempt binding, replay rejection, and revocation occur at attempt termination and daemon restart.
-  - Daemon/UI restart preserves the attempt identity and does not duplicate a command.
+  - The managed App Server child receives no broker endpoint, credential, privileged descriptor, or inherited operator state.
+  - Daemon restart preserves the attempt identity and does not duplicate a command.
   - Runtime disconnects classify command certainty without claiming downstream provider acceptance.
   - A durable timer retains its original due time across daemon restart and fires its transition at most once.
   - A crash after step eligibility but before dispatch resumes the same stable step; a crash after dispatch starts quarantines the step until acknowledgement or reconciliation evidence resolves it.
@@ -719,14 +721,14 @@ Each U-ID is intended to be a separate tracker item and implementation context. 
 | Gate | Applies when | Command | Required evidence |
 |---|---|---|---|
 | Rust format | Any Rust change | `rtk cargo fmt --all -- --check` | No formatting diff |
-| Rust workspace tests | Any Rust change | `rtk just test` | All unit, fixture, migration, and integration tests pass |
-| Rust lint | Any Rust change | `rtk just lint` | Clippy emits no warnings |
-| Rust type check | Workspace/dependency change | `rtk just check` | Every workspace member checks |
+| Rust workspace tests | Any Rust change | `rtk just --dotenv-filename agents.defaults test` | All unit, fixture, migration, and integration tests pass |
+| Rust lint | Any Rust change | `rtk just --dotenv-filename agents.defaults lint` | Clippy emits no warnings |
+| Rust type check | Workspace/dependency change | `rtk just --dotenv-filename agents.defaults check` | Every workspace member checks |
 | Frontend type check | Tauri/Svelte/TypeScript change | `rtk npm run check` | Svelte and TypeScript report no errors |
 | Frontend tests | UI/store change after U8/U11 | `rtk npm run test` | Component, reconnect, privacy, approval, and recovery tests pass |
 | Frontend build | UI/bundle change | `rtk npm run build` | Production assets build |
-| Managed lifecycle | U5-U12 | `rtk cargo test -p gc-brokerd --test managed_lifecycle` | Fake App Server lifecycle, evidence, failure, and recovery scenarios pass |
-| Full fixture replay | U3 onward | `rtk cargo test -p gc-core --test journal_replay` | Rebuilt views match expected semantic state |
+| Managed lifecycle | U6 and applicable descendants | `rtk env RUSTC_WRAPPER= cargo test -p gc-brokerd --test managed_lifecycle` | Fake App Server lifecycle, evidence, failure, and recovery scenarios pass |
+| Full fixture replay | U3 onward | `rtk env RUSTC_WRAPPER= cargo test -p gc-core --test journal_replay` | Rebuilt views match expected semantic state |
 | macOS lifecycle smoke | U10 and U9 | Documented install smoke procedure | Service registration, UI independence, restart, and cleanup evidence recorded |
 
 ### Failure-Injection Matrix
@@ -838,7 +840,6 @@ The broker integration suite must inject failures at these boundaries:
 
 ### Repository evidence
 
-- `HANDOFF.md` identifies the product boundary, material correctness defects, and the managed Codex vertical slice.
 - `crates/gc-core/src/store.rs` shows the unversioned inline schema, aggregate rows, and direct process-local SQLite access.
 - `crates/gc-core/src/parser.rs` and `crates/gc-core/src/watcher.rs` show silent parse loss, non-reversible hyphen decoding, byte-offset risks, and provider-specific observer events.
 - `crates/gc-cli/src/main.rs` and `src-tauri/src/lib.rs` show multiple watcher/database owners and a Tauri lifecycle that currently owns observation.
