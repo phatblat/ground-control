@@ -1,8 +1,14 @@
 # Ground Control
 
-Monitor, manage, and search across all Claude Code sessions on your system.
+Observe local agent sessions and build toward durable managed agent work.
 
-Ground Control is the runtime dashboard for your Claude Code agents — it shows what they're doing, what they've done, and what they've cost. It complements [Gantry](https://github.com/phatblat/gantry), which manages agent configuration.
+Ground Control is a local control plane for agent work. Today it indexes and monitors Claude Code sessions; the first managed slice adds a persistent broker that can launch and control Codex work without tying it to a terminal or desktop window. It complements [Gantry](https://github.com/phatblat/gantry), which owns agent configuration packages.
+
+Ground Control distinguishes three kinds of session:
+
+- **Managed** — launched and controlled through a supported runtime adapter.
+- **Cooperative** — externally launched, with only the controls the runtime explicitly exposes.
+- **Observed** — local telemetry such as Claude transcripts and heartbeats; observation never implies control.
 
 ## Features
 
@@ -98,15 +104,21 @@ cargo tauri dev
 
 ## Architecture
 
-Rust workspace with three crates sharing a core library:
+The current Rust workspace contains the observation baseline:
 
 | Crate | Purpose |
 |-------|---------|
-| `gc-core` | JSONL parser, SQLite index with FTS5 search, data models |
+| `gc-core` | Claude observation parser, SQLite index with FTS5 search, data models |
 | `gc-cli` | `gc` binary — terminal interface |
 | `ground-control` (src-tauri) | Tauri 2 desktop app |
 
-Data flows from Claude Code's local storage (`~/.claude/`) through a version-aware JSONL parser into a SQLite index at `~/.local/share/ground-control/index.db`. The index is a derived cache — it can be rebuilt from scratch at any time with `gc index`.
+Claude data flows from its configured local directory into the existing observation index at `~/.local/share/ground-control/index.db`. That legacy index is a derived cache and can be rebuilt with `gc index`.
+
+The managed architecture adds `gc-brokerd` as the sole runtime and journal authority, `gc-protocol` as the shared bounded wire contract, and Codex App Server as the first managed adapter. Its event journal is authoritative; only cursor-qualified current-state views are rebuilt from it. The CLI and Tauri app become thin clients of the same broker protocol.
+
+The first managed slice is headless and manually starts the broker. It uses the installed Codex defaults, a trusted executable outside the worktree, and a clean Git repository at an explicit commit. Tauri service integration, provider profiles, fallback, acceptance, and recovery briefs follow in later packages.
+
+Public client data is metadata and redacted evidence summaries by default. Raw messages, prompts, tool arguments, patches, receipts, credentials, and broker capabilities do not enter the normal client surface or managed worktree environment.
 
 See [docs/spec.md](docs/spec.md) for the full specification.
 
