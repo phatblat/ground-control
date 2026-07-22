@@ -188,15 +188,19 @@ fn claude_directory_configuration_is_explicit_and_non_panicking() {
 }
 
 #[test]
-#[ignore = "GC-33: unknown variants require stable diagnostics"]
-fn unknown_entry_is_not_silently_omitted() {
+#[ignore = "GC-33: unknown variants must report their line and discriminator"]
+fn unknown_entry_reports_stable_source_diagnostic() {
     let root = TestDir::new("unknown-entry");
     let path = transcript_path(&root, &format!("{SESSION_ID}.jsonl"));
     write_transcript(&path, UNKNOWN);
 
     let result = parser::parse_session_summary("/repo", &path);
 
-    assert!(matches!(result, Err(ParseError::Json { .. })));
+    assert!(matches!(
+        result,
+        Err(ParseError::Json { line: 1, ref source })
+            if source.to_string().contains("future-provider-event")
+    ));
 }
 
 #[test]
