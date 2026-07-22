@@ -59,14 +59,7 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn cmd_list(store: &Store, project_filter: Option<&str>) -> anyhow::Result<()> {
-    let results = store.all_sessions()?;
-    let results: Vec<_> = match project_filter {
-        Some(filter) => results
-            .into_iter()
-            .filter(|r| r.display_name.contains(filter) || r.project_path.contains(filter))
-            .collect(),
-        None => results,
-    };
+    let results = list_sessions(store, project_filter)?;
 
     if results.is_empty() {
         println!("No sessions found. Run `gc index` to build the index.");
@@ -90,6 +83,21 @@ fn cmd_list(store: &Store, project_filter: Option<&str>) -> anyhow::Result<()> {
     }
     println!("\n{} session(s)", results.len());
     Ok(())
+}
+
+fn list_sessions(
+    store: &Store,
+    project_filter: Option<&str>,
+) -> anyhow::Result<Vec<gc_core::store::SearchResult>> {
+    let results = store.all_sessions()?;
+    let results: Vec<_> = match project_filter {
+        Some(filter) => results
+            .into_iter()
+            .filter(|r| r.display_name.contains(filter) || r.project_path.contains(filter))
+            .collect(),
+        None => results,
+    };
+    Ok(results)
 }
 
 fn cmd_search(store: &Store, query: &str) -> anyhow::Result<()> {
@@ -306,6 +314,7 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
+    use gc_core::models::SessionSummary;
 
     const SESSION_ID: &str = "00000000-0000-4000-8000-000000000001";
     const BASE: &str = include_str!("../../gc-core/tests/fixtures/claude/base.jsonl");
@@ -335,6 +344,32 @@ mod tests {
         fs::write(path, contents).expect("write synthetic transcript");
     }
 
+    fn summary(session_id: Uuid, project_path: &str) -> SessionSummary {
+        SessionSummary {
+            session_id,
+            project_path: project_path.to_string(),
+            display_name: project_path
+                .rsplit('/')
+                .next()
+                .unwrap_or(project_path)
+                .to_string(),
+            custom_title: None,
+            ai_title: None,
+            agent_name: None,
+            started_at: None,
+            updated_at: None,
+            version: None,
+            git_branch: None,
+            kind: None,
+            status: None,
+            total_input_tokens: 0,
+            total_output_tokens: 0,
+            total_cache_read_tokens: 0,
+            total_cache_creation_tokens: 0,
+            message_count: 0,
+        }
+    }
+
     #[test]
     #[ignore = "GC-33: incremental watcher must reload the persisted summary"]
     fn incremental_watch_update_preserves_persisted_totals() {
@@ -352,5 +387,30 @@ mod tests {
         assert_eq!(sessions[0].input_tokens, 15);
         assert_eq!(sessions[0].output_tokens, 3);
         assert_eq!(sessions[0].message_count, 3);
+    }
+
+    #[test]
+    #[ignore = "GC-33: project filtering must happen in SQLite before pagination"]
+    fn project_filter_can_find_a_session_beyond_the_first_page() {
+        let store = Store::open_in_memory().unwrap();
+        let target_id = Uuid::new_v4();
+        store
+            .upsert_session(&summary(target_id, "/projects/target"))
+            .unwrap();
+
+        std::thread::sleep(Duration::from_millis(1_100));
+        for index in 0..100 {
+            store
+                .upsert_session(&summary(
+                    Uuid::new_v4(),
+                    &format!("/projects/other-{index}"),
+                ))
+                .unwrap();
+        }
+
+        let filtered = list_sessions(&store, Some("target")).unwrap();
+
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].session_id, target_id.to_string());
     }
 }

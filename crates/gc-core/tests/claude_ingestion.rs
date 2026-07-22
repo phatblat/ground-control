@@ -2,12 +2,8 @@ use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::thread;
-use std::time::Duration;
 
-use gc_core::models::SessionSummary;
 use gc_core::parser::{self, ParseError};
-use gc_core::store::Store;
 use uuid::Uuid;
 
 const SESSION_ID: &str = "00000000-0000-4000-8000-000000000001";
@@ -71,32 +67,6 @@ fn transcript_path(root: &TestDir, name: &str) -> PathBuf {
 
 fn write_transcript(path: &Path, contents: &str) {
     fs::write(path, contents).expect("write synthetic transcript");
-}
-
-fn summary(session_id: Uuid, project_path: &str) -> SessionSummary {
-    SessionSummary {
-        session_id,
-        project_path: project_path.to_string(),
-        display_name: project_path
-            .rsplit('/')
-            .next()
-            .unwrap_or(project_path)
-            .to_string(),
-        custom_title: None,
-        ai_title: None,
-        agent_name: None,
-        started_at: None,
-        updated_at: None,
-        version: None,
-        git_branch: None,
-        kind: None,
-        status: None,
-        total_input_tokens: 0,
-        total_output_tokens: 0,
-        total_cache_read_tokens: 0,
-        total_cache_creation_tokens: 0,
-        message_count: 0,
-    }
 }
 
 #[test]
@@ -196,36 +166,6 @@ fn invalid_session_filename_uses_transcript_identity() {
     let transcript_id = Uuid::parse_str(SESSION_ID).unwrap();
 
     assert_eq!(parsed.session_id, transcript_id);
-}
-
-#[test]
-#[ignore = "GC-33: project filtering must happen in SQLite before pagination"]
-fn project_filter_can_find_a_session_beyond_the_first_page() {
-    let store = Store::open_in_memory().unwrap();
-    let target_id = Uuid::new_v4();
-    store
-        .upsert_session(&summary(target_id, "/projects/target"))
-        .unwrap();
-
-    thread::sleep(Duration::from_millis(1_100));
-    for index in 0..100 {
-        store
-            .upsert_session(&summary(
-                Uuid::new_v4(),
-                &format!("/projects/other-{index}"),
-            ))
-            .unwrap();
-    }
-
-    let filtered: Vec<_> = store
-        .all_sessions()
-        .unwrap()
-        .into_iter()
-        .filter(|row| row.project_path.contains("target"))
-        .collect();
-
-    assert_eq!(filtered.len(), 1);
-    assert_eq!(filtered[0].session_id, target_id.to_string());
 }
 
 #[test]
