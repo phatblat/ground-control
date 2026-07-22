@@ -61,7 +61,7 @@ The Ground Control journal is the durability authority. Stable workflow steps, d
 
 ## Current observation surface
 
-The shipped CLI observes Claude Code data from its configured local directory:
+The shipped CLI observes Claude Code data from the local directory rooted at `$HOME/.claude`:
 
 ```text
 gc index                      Scan Claude data and rebuild the observation index
