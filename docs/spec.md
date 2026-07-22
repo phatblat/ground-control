@@ -71,7 +71,7 @@ gc burn                       Summarize observed token usage
 gc live                       Show current observed session heartbeats
 ```
 
-Claude's local formats are undocumented and may change. Parsers therefore preserve deterministic source identity, process only complete records, and surface unknown or invalid variants as diagnostics. They do not infer paths by reversing ambiguous hyphen encoding, invent identities, or silently treat unknown input as understood.
+Claude's local formats are undocumented and may change. The current parser is best-effort: invalid filenames can receive generated identities, malformed JSONL entries are skipped, and project paths use a lossy hyphen-to-slash decode. Deterministic identities, complete-record handling, diagnostics for invalid variants, and unambiguous path decoding remain ingestion-hardening requirements rather than guarantees of the current observation surface.
 
 JSON Schemas for observed formats live in `schema/`. Scrubbed and synthetic fixture replay protects the ingestion contract without committing local session content.
 
