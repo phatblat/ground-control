@@ -204,16 +204,16 @@ fn unknown_entry_reports_stable_source_diagnostic() {
 }
 
 #[test]
-#[ignore = "GC-33: invalid filenames require deterministic source identity"]
-fn invalid_session_filename_never_creates_a_random_identity() {
+#[ignore = "GC-33: invalid filenames must use transcript identity"]
+fn invalid_session_filename_uses_transcript_identity() {
     let root = TestDir::new("invalid-session-id");
     let path = transcript_path(&root, "not-a-uuid.jsonl");
     write_transcript(&path, BASE);
 
-    let first = parser::parse_session_summary("/repo", &path).unwrap();
-    let second = parser::parse_session_summary("/repo", &path).unwrap();
+    let parsed = parser::parse_session_summary("/repo", &path).unwrap();
+    let transcript_id = Uuid::parse_str(SESSION_ID).unwrap();
 
-    assert_eq!(first.session_id, second.session_id);
+    assert_eq!(parsed.session_id, transcript_id);
 }
 
 #[test]
