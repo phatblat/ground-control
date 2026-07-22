@@ -250,7 +250,14 @@ fn print_refresh_timestamp() {
 
 fn cmd_index(store: &Store) -> anyhow::Result<()> {
     let projects_dir = projects_dir();
-    let projects = parser::list_projects(&projects_dir)?;
+    let (total, project_count) = rebuild_index(store, &projects_dir)?;
+
+    println!("Indexed {total} sessions across {project_count} projects.");
+    Ok(())
+}
+
+fn rebuild_index(store: &Store, projects_dir: &Path) -> anyhow::Result<(usize, usize)> {
+    let projects = parser::list_projects(projects_dir)?;
     let mut total = 0;
 
     for project in &projects {
@@ -274,11 +281,7 @@ fn cmd_index(store: &Store) -> anyhow::Result<()> {
         }
     }
 
-    println!(
-        "Indexed {total} sessions across {} projects.",
-        projects.len()
-    );
-    Ok(())
+    Ok((total, projects.len()))
 }
 
 fn db_path() -> PathBuf {
@@ -412,5 +415,22 @@ mod tests {
 
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].session_id, target_id.to_string());
+    }
+
+    #[test]
+    #[ignore = "GC-33: full rebuild must reconcile deleted transcripts"]
+    fn rebuild_removes_a_deleted_transcript_from_the_read_model() {
+        let root = TestDir::new("stale-deletion");
+        let project_dir = root.path().join("-repo");
+        fs::create_dir(&project_dir).unwrap();
+        let path = project_dir.join(format!("{SESSION_ID}.jsonl"));
+        write_transcript(&path, BASE);
+        let store = Store::open_in_memory().unwrap();
+
+        rebuild_index(&store, root.path()).unwrap();
+        fs::remove_file(path).unwrap();
+        rebuild_index(&store, root.path()).unwrap();
+
+        assert!(store.all_sessions().unwrap().is_empty());
     }
 }
