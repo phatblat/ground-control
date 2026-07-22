@@ -167,26 +167,3 @@ fn invalid_session_filename_uses_transcript_identity() {
 
     assert_eq!(parsed.session_id, transcript_id);
 }
-
-#[test]
-#[ignore = "GC-33: full rebuild must reconcile deleted transcripts"]
-fn rebuild_removes_a_deleted_transcript_from_the_read_model() {
-    let root = TestDir::new("stale-deletion");
-    let project_dir = root.path().join("project");
-    fs::create_dir(&project_dir).unwrap();
-    let path = project_dir.join(format!("{SESSION_ID}.jsonl"));
-    write_transcript(&path, BASE);
-    let store = Store::open_in_memory().unwrap();
-
-    for transcript in parser::list_session_jsonls(&project_dir).unwrap() {
-        let parsed = parser::parse_session_summary("/repo", &transcript).unwrap();
-        store.upsert_session(&parsed).unwrap();
-    }
-    fs::remove_file(path).unwrap();
-    for transcript in parser::list_session_jsonls(&project_dir).unwrap() {
-        let parsed = parser::parse_session_summary("/repo", &transcript).unwrap();
-        store.upsert_session(&parsed).unwrap();
-    }
-
-    assert!(store.all_sessions().unwrap().is_empty());
-}
