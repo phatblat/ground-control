@@ -132,8 +132,8 @@ fn partial_jsonl_record_does_not_advance_the_cursor() {
 }
 
 #[test]
-#[ignore = "GC-33: truncation must reset or quarantine the source cursor"]
-fn truncation_never_retains_an_offset_past_end_of_file() {
+#[ignore = "GC-33: truncation must reset parser state"]
+fn truncation_resets_cursor_and_summary_to_file_contents() {
     let root = TestDir::new("truncation");
     let path = transcript_path(&root, &format!("{SESSION_ID}.jsonl"));
     write_transcript(&path, &format!("{BASE}{APPEND}"));
@@ -144,7 +144,12 @@ fn truncation_never_retains_an_offset_past_end_of_file() {
         parser::parse_session_incremental("/repo", &path, first.new_offset, Some(first.summary))
             .unwrap();
 
-    assert!(result.new_offset <= BASE.len() as u64);
+    assert_eq!(result.new_offset, BASE.len() as u64);
+    assert_eq!(result.summary.total_input_tokens, 10);
+    assert_eq!(result.summary.total_output_tokens, 2);
+    assert_eq!(result.summary.total_cache_read_tokens, 4);
+    assert_eq!(result.summary.total_cache_creation_tokens, 3);
+    assert_eq!(result.summary.message_count, 2);
 }
 
 #[test]
