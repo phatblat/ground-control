@@ -1,0 +1,1 @@
+{"type":"assistant","uuid":"33333333-3333-4333-8333-333333333333","sessionId":"00000000-0000-4000-8000-000000000001","cwd":"/Users/example/dev/my-project","version":"2.1.140","gitBranch":"main","message":{"role":"assistant","content":[],"model":"claude-test","usage":{"input_tokens":5,"output_tokens":1,"cache_creation_input_tokens":0,"cache_read_input_tokens":2}}}
