@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::RecvTimeoutError;
 use std::time::Duration;
 
@@ -192,16 +192,7 @@ fn cmd_watch(store: &Store) -> anyhow::Result<()> {
                 project_path,
                 jsonl_path,
             }) => {
-                // Incremental indexing for changed session files
-                let jsonl_key = jsonl_path.to_string_lossy().to_string();
-                let offset = store.get_byte_offset(&jsonl_key).unwrap_or(0);
-                let existing = None; // fresh parse from offset
-                if let Ok(result) =
-                    parser::parse_session_incremental(&project_path, &jsonl_path, offset, existing)
-                {
-                    let _ = store.upsert_session(&result.summary);
-                    let _ = store.set_byte_offset(&jsonl_key, result.new_offset);
-                }
+                let _ = index_changed_session(store, &project_path, &jsonl_path);
 
                 refresh_display(&sessions_dir);
             }
@@ -220,6 +211,19 @@ fn cmd_watch(store: &Store) -> anyhow::Result<()> {
         }
     }
 
+    Ok(())
+}
+
+fn index_changed_session(
+    store: &Store,
+    project_path: &str,
+    jsonl_path: &Path,
+) -> anyhow::Result<()> {
+    let jsonl_key = jsonl_path.to_string_lossy().to_string();
+    let offset = store.get_byte_offset(&jsonl_key)?;
+    let result = parser::parse_session_incremental(project_path, jsonl_path, offset, None)?;
+    store.upsert_session(&result.summary)?;
+    store.set_byte_offset(&jsonl_key, result.new_offset)?;
     Ok(())
 }
 
@@ -291,5 +295,62 @@ fn format_tokens(n: i64) -> String {
         format!("{:.1}K", n as f64 / 1_000.0)
     } else {
         n.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    use uuid::Uuid;
+
+    use super::*;
+
+    const SESSION_ID: &str = "00000000-0000-4000-8000-000000000001";
+    const BASE: &str = include_str!("../../gc-core/tests/fixtures/claude/base.jsonl");
+    const APPEND: &str = include_str!("../../gc-core/tests/fixtures/claude/append.jsonl");
+
+    struct TestDir(PathBuf);
+
+    impl TestDir {
+        fn new(name: &str) -> Self {
+            let path = std::env::temp_dir().join(format!("gc-{name}-{}", Uuid::new_v4()));
+            fs::create_dir_all(&path).expect("create test directory");
+            Self(path)
+        }
+
+        fn path(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TestDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn write_transcript(path: &Path, contents: &str) {
+        fs::write(path, contents).expect("write synthetic transcript");
+    }
+
+    #[test]
+    #[ignore = "GC-33: incremental watcher must reload the persisted summary"]
+    fn incremental_watch_update_preserves_persisted_totals() {
+        let root = TestDir::new("incremental-totals");
+        let path = root.path().join(format!("{SESSION_ID}.jsonl"));
+        write_transcript(&path, BASE);
+        let store = Store::open_in_memory().unwrap();
+
+        index_changed_session(&store, "/repo", &path).unwrap();
+        fs::write(&path, format!("{BASE}{APPEND}")).unwrap();
+        index_changed_session(&store, "/repo", &path).unwrap();
+
+        let sessions = store.all_sessions().unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].input_tokens, 15);
+        assert_eq!(sessions[0].output_tokens, 3);
+        assert_eq!(sessions[0].message_count, 3);
     }
 }

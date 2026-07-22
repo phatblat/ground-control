@@ -1054,6 +1054,7 @@ dependencies = [
  "dirs-next",
  "gc-core",
  "serde_json",
+ "uuid",
 ]
 
 [[package]]
