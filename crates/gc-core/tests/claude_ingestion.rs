@@ -167,7 +167,7 @@ fn hyphenated_project_directory_is_not_invented_by_replacement() {
 }
 
 #[test]
-#[ignore = "GC-33: configuration must honor CLAUDE_CONFIG_DIR and return typed errors"]
+#[ignore = "GC-33: configuration must honor CLAUDE_CONFIG_DIR and avoid panics"]
 fn claude_directory_configuration_is_explicit_and_non_panicking() {
     let _lock = ENV_LOCK.lock().unwrap();
     let _snapshot = EnvSnapshot::capture();
@@ -184,10 +184,7 @@ fn claude_directory_configuration_is_explicit_and_non_panicking() {
         std::env::remove_var("HOME");
     }
     let result = std::panic::catch_unwind(gc_core::claude_home);
-    assert!(
-        result.is_ok(),
-        "missing HOME must return an error, not panic"
-    );
+    assert!(result.is_ok(), "missing HOME must not panic");
 }
 
 #[test]
