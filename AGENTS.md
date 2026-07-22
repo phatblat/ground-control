@@ -14,6 +14,14 @@
 
 Use `rtk` before shell commands, per `RTK.md` (for example, `rtk cargo test --workspace`).
 
+Agent harnesses must load the committed public agent environment for Rust and Tauri recipes:
+
+```sh
+rtk just --dotenv-filename agents.defaults <recipe>
+```
+
+This dotenv-format profile disables sandbox-incompatible compiler wrappers without changing normal developer or CI environments. Prefer the listed `just` recipes; when a direct Cargo command is required, use `rtk env RUSTC_WRAPPER= cargo ...`. Treat `agents.defaults` as public configuration and never add secrets or machine-specific paths to it.
+
 - `just build`: build all Rust crates.
 - `just test`: run `cargo test --workspace`.
 - `just lint`: run Clippy across the workspace with warnings denied.
