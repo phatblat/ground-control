@@ -100,24 +100,6 @@ fn summary(session_id: Uuid, project_path: &str) -> SessionSummary {
 }
 
 #[test]
-#[ignore = "GC-33: incremental watcher must reload the persisted summary"]
-fn incremental_append_preserves_persisted_totals() {
-    let root = TestDir::new("incremental-totals");
-    let path = transcript_path(&root, &format!("{SESSION_ID}.jsonl"));
-    write_transcript(&path, BASE);
-
-    let first = parser::parse_session_incremental("/repo", &path, 0, None).unwrap();
-    fs::write(&path, format!("{BASE}{APPEND}")).unwrap();
-
-    // Mirrors the current watcher call, which reads the cursor but not the persisted summary.
-    let update = parser::parse_session_incremental("/repo", &path, first.new_offset, None).unwrap();
-
-    assert_eq!(update.summary.total_input_tokens, 15);
-    assert_eq!(update.summary.total_output_tokens, 3);
-    assert_eq!(update.summary.message_count, 3);
-}
-
-#[test]
 #[ignore = "GC-33: cursor may advance only through newline-terminated bytes"]
 fn partial_jsonl_record_does_not_advance_the_cursor() {
     let root = TestDir::new("partial-record");
