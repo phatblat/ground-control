@@ -34,7 +34,7 @@ run *args:
 # Run clippy lints
 [group('checks')]
 lint:
-    cargo clippy --workspace -- -D warnings
+    cargo clippy --workspace --all-targets -- -D warnings
 
 # Check types without building
 [group('checks')]
