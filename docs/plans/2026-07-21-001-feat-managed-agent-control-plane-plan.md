@@ -94,7 +94,6 @@ Service interruptions are especially costly. A request may fail before dispatch,
 - R22. The first managed attempt and every retry must use an isolated Git worktree created from a verified workspace seed that does not modify the source checkout. Unsupported, dirty-unbounded, or oversized state must disable automatic retry and retain manual guidance.
 - R23. Same-attempt resume is permitted only when thread, workspace, runtime, config, and instruction fingerprints still match an unambiguous resumable state.
 - R24. “Retry with recovery brief” must bind generated facts and confirmation to the latest evidence decision cursor, restore a verified filesystem checkpoint, preserve the failed worktree, and require acknowledgement when effects are unknown or unsafe. Same-provider retry may fork through the checkpoint turn when capability-proven; alternate-provider fallback starts a new conversation with a sensitivity-filtered brief.
-- R36. Ground Control's journal must remain the durability authority. Workflow steps require stable identities, reducer-derived eligibility, durable due times, and separate intent, dispatch-started, acknowledgement, and outcome states; restart may safely dispatch an eligible unstarted step but must quarantine a started step whose outcome cannot be proven rather than replaying it.
 
 **Evidence, acceptance, and UI**
 
@@ -104,7 +103,6 @@ Service interruptions are especially costly. A request may fail before dispatch,
 - R28. Acceptance definitions must be operator-authored, revision-bound, and stored outside mutable repository content. Automated runners require a sanitized, bounded, worktree-confined environment with no provider secret, Keychain, broker socket, or lingering process access; otherwise acceptance remains operator-triggered and potentially side-effecting.
 - R29. The first UI must provide an attention-oriented mission board and work-unit detail with deterministic attention ranking, explicit managed/cooperative/observed treatment, runtime state, freshness, capabilities, usage, optional budget, acceptance, checkpoint, evidence, side-effect safety, fallback, and available controls.
 - R30. Token budgets must be nullable, advisory, and provenance-qualified; missing usage must remain unknown and must not block launch, recovery, or acceptance.
-- R35. Private storage must expose operator-visible size and health, support an explicit stop-and-purge operation that preserves non-sensitive audit tombstones, and fail closed before new external dispatch when durable storage is unavailable or over its configured limit.
 
 **Compatibility, security, and quality**
 
@@ -112,6 +110,8 @@ Service interruptions are especially costly. A request may fail before dispatch,
 - R32. Tauri must allow only bundled origins, deny unapproved navigation/windows, validate bounded typed payloads again in Rust, and expose a minimal least-privilege bridge with no broad shell plugin. Approval decisions bind the exact displayed action hash and revision.
 - R33. The macOS app must register the `gc-brokerd` executable as the per-user LaunchAgent labeled `at.phatbl.ground-control.brokerd` while reporting a containment state. A Unix socket and peer UID do not defend against malicious unsandboxed same-user code; broad-access runtime mode requires explicit acknowledgement.
 - R34. Scrubbed fixture replay, golden wire vectors, model-based reducer/state-machine tests, fake App Server integration, migration/import tests, durable failpoints, crash recovery, CLI protocol tests, frontend tests, and CI must cover all high-risk state transitions.
+- R35. Private storage must expose operator-visible size and health, support an explicit stop-and-purge operation that preserves non-sensitive audit tombstones, and fail closed before new external dispatch when durable storage is unavailable or over its configured limit.
+- R36. Ground Control's journal must remain the durability authority. Workflow steps require stable identities, reducer-derived eligibility, durable due times, and separate intent, dispatch-started, acknowledgement, and outcome states; restart may safely dispatch an eligible unstarted step but must quarantine a started step whose outcome cannot be proven rather than replaying it.
 
 ### Key Flows
 
