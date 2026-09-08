@@ -20,11 +20,11 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Run tests
-        run: cargo test --workspace
+        run: cargo test --workspace --locked
       - name: Run Clippy
-        run: cargo clippy --workspace -- -D warnings
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Check workspace
-        run: cargo check --workspace
+        run: cargo check --workspace --locked
 
   frontend:
     runs-on: macos-14
