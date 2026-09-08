@@ -1,172 +1,163 @@
 # Ground Control
 
-A desktop app for monitoring, managing, and searching across all Claude Code sessions on a system. Ground Control is the runtime dashboard — it shows what your agents are doing, what they've done, and what they've cost. It complements [Gantry](https://github.com/phatblat/gantry), which manages agent configuration; Ground Control manages agent observation.
+Ground Control is a local control plane for agent work. It observes sessions that expose only telemetry and, when a runtime offers a supported control surface, launches and manages work without tying its lifetime to a terminal or desktop window.
 
-The name follows a space launch metaphor: Gantry arranges the vehicle on the pad, Ground Control monitors the mission.
+It complements [Gantry](https://github.com/phatblat/gantry): Gantry prepares agent configuration packages; Ground Control owns runtime observation, orchestration policy, provider profiles, operational evidence, and controls.
 
-## Problem
+The name follows the launch metaphor: Gantry prepares the vehicle, while Ground Control monitors and directs the mission.
 
-Claude Code sessions accumulate across projects with no unified way to find, compare, or monitor them. The built-in `claude --resume` requires you to know which project directory a session belongs to. Token usage is invisible unless you scrape individual session files. There's no view of what's running across the system right now.
+## Product boundary
 
-[Opcode](https://github.com/winfunc/opcode) addresses some of this but requires picking a project directory first, doesn't monitor live sessions, and ships under AGPL-3.0 which limits derivative use.
+Ground Control treats sessions according to the authority it actually has:
+
+| Session class | Ground Control can observe | Ground Control can control |
+|---|---|---|
+| Managed | Runtime state, usage, evidence, and freshness | Launch and supported lifecycle actions through a managed adapter |
+| Cooperative | Telemetry voluntarily exposed by an external runtime | Only actions explicitly exposed by that runtime |
+| Observed | Local files and process metadata | Nothing; a PID or transcript never implies control |
+
+The first managed runtime is the installed Codex App Server. Existing Claude Code sessions remain observed until Claude exposes a supported control surface. Ground Control never presents an observed PID as a controllable process.
+
+## Core vocabulary
+
+- **Work unit:** The operator's durable objective and acceptance policy.
+- **Attempt:** One execution of a work unit on a specific runtime, provider, host, and isolated workspace.
+- **Turn:** One provider-recognized interaction inside an attempt.
+- **Event journal:** Append-only private operational history owned by Ground Control.
+- **Current-state view:** State deterministically reduced from journal events through a named journal sequence and reducer version.
+- **Fixture replay:** Scrubbed provider or collector records passed through real ingestion and reduction code to verify canonical output.
+- **Evidence:** A provenance-bearing observation or verification result. An agent's final message is evidence, not proof that acceptance passed.
+- **Recovery brief:** Deterministic guidance that distinguishes confirmed, attempted, and unknown effects before retrying work.
 
 ## Architecture
 
-Rust workspace with three crates sharing a core library:
+Ground Control is moving from several process-local observers to one persistent per-user service:
 
-- **gc-core** — data models, JSONL parser, SQLite index with FTS5 search. Reads directly from Claude Code's local storage (`~/.claude/`). All parsing is behind a version-aware abstraction so format changes can be handled without rewriting consumers.
-- **gc-cli** — `gc` binary for terminal use. Indexes sessions, searches, shows live status, reports token burn. Ships as a single binary with no runtime dependencies beyond SQLite (bundled).
-- **ground-control** (src-tauri) — Tauri 2 desktop app. Rust backend calls gc-core; Svelte 5 frontend renders the UI. Communicates via Tauri commands (request/response) and Tauri events (streaming updates).
+| Component | Responsibility |
+|---|---|
+| `gc-core` | Provider-neutral domain types, Claude observation, journal, migrations, reducers, and current-state views |
+| `gc-protocol` | Versioned, bounded, redacted broker wire types and reusable client |
+| `gc-brokerd` | Sole journal writer, runtime owner, policy authority, and command coordinator |
+| `gc` | Reference headless client for observation and managed controls |
+| Tauri app | Thin presentation client for the same broker snapshots, follow stream, and commands |
+| Runtime adapters | Translate runtime-specific identities, capabilities, events, and lifecycle actions |
 
-The SQLite index (`~/.local/share/ground-control/index.db`) is derived from the JSONL source files. It can be rebuilt from scratch at any time — it's a cache, not primary storage. FTS5 provides full-text search across session titles, agent names, and project paths.
+Clients do not gain authority by reading SQLite directly. They request an atomic snapshot at a current-state cursor, follow journal sequences inclusively, deduplicate events, and resnapshot when compatibility or cursor rules require it.
 
-### Data sources
+### Data authority
 
-Claude Code stores session data in `~/.claude/` across several file types:
+Two different storage promises coexist during migration:
 
-| File | Location | Format | Purpose |
-|------|----------|--------|---------|
-| Session registry | `~/.claude/sessions/<pid>.json` | JSON | Live heartbeat for running sessions. Contains pid, status (idle/busy), cwd, version, kind (interactive/background), name. |
-| Session transcript | `~/.claude/projects/<encoded-path>/<uuid>.jsonl` | JSONL | Append-only conversation history. Each line is a typed entry (user, assistant, system, attachment, etc.). Token usage embedded in assistant entries. Messages form a DAG via parentUuid. |
-| Global history | `~/.claude/history.jsonl` | JSONL | Prompt history across all sessions. |
+- `~/.local/share/ground-control/index.db` is the existing derived Claude observation cache. It may be rebuilt from retained Claude source files.
+- The managed control-plane database is authoritative. Its append-only event journal, command intent, evidence, and uncertainty cannot be discarded as a cache. Current-state views are rebuildable from that journal.
 
-The JSONL transcript format is a discriminated union on the `type` field with 12 known variants: `user`, `assistant`, `attachment`, `system`, `agent-name`, `ai-title`, `custom-title`, `last-prompt`, `permission-mode`, `pr-link`, `queue-operation`, `file-history-snapshot`. JSON Schemas for these surfaces are maintained in `schema/` for eventual extraction to [claude-config-schema](https://github.com/phatblat/claude-config-schema).
+The legacy index remains a read-only import source until explicitly retired. Aggregate legacy rows are labeled observations; they are never converted into fabricated turns or verified evidence.
 
-Project directories use a path-encoding scheme where `/` is replaced with `-`, so `/Users/phatblat/dev/claude/ground-control` becomes `-Users-phatblat-dev-claude-ground-control`.
+### Failure semantics
 
-**Format stability risk.** None of this is a documented public API. The `version` field on JSONL entries (e.g. `2.1.140`) enables version-aware parsing. The parser should degrade gracefully on unknown fields (`additionalProperties: true` in schemas, `#[serde(deny_unknown_fields)]` not used in models) and skip entries it can't parse rather than failing the entire session.
+Ground Control records broker-to-runtime command dispatch separately from runtime-to-provider request state. A runtime write failure, ambiguous provider send, interrupted stream, provider-native retry, and completed result are different states. Unknown outcomes are quarantined instead of replayed blindly.
 
-## CLI surface
+The Ground Control journal is the durability authority. Stable workflow steps, durable due times, command intent, dispatch start, acknowledgement, and outcome state let the broker recover after restart without making an agent SDK or external workflow engine a second source of truth.
 
-```
-gc index                      Scan ~/.claude/ and rebuild the SQLite index
-gc list [--project <name>]    List sessions, optionally filtered by project
-gc search <query>             Full-text search across session titles and metadata
-gc burn                       Token usage summary across all indexed sessions
-gc live                       Show currently running sessions with PID/status/cwd
-```
+## Current observation surface
 
-### Planned commands
+The shipped CLI observes Claude Code data from the local directory rooted at `$HOME/.claude`:
 
-```
-gc resume [<query>]           Search + fzf picker → claude --resume in the right cwd
-gc burn --weekly              Token burn broken down by week
-gc burn --project <name>      Token burn scoped to a single project
-gc watch                      Live-updating dashboard of running sessions
+```text
+gc index                      Scan Claude data and rebuild the observation index
+gc list [--project <name>]    List observed sessions
+gc search <query>             Search observed session metadata
+gc burn                       Summarize observed token usage
+gc live                       Show current observed session heartbeats
 ```
 
-## Desktop app surface
+Claude's local formats are undocumented and may change. The current parser is best-effort: invalid filenames can receive generated identities, malformed JSONL entries are skipped, and project paths use a lossy hyphen-to-slash decode. Deterministic identities, complete-record handling, diagnostics for invalid variants, and unambiguous path decoding remain ingestion-hardening requirements rather than guarantees of the current observation surface.
 
-The Tauri app provides what the CLI cannot: persistent visibility, real-time updates, and rich data visualization.
+JSON Schemas for observed formats live in `schema/`. Scrubbed and synthetic fixture replay protects the ingestion contract without committing local session content.
 
-### Views
+## First managed vertical slice
 
-**Dashboard.** System-wide overview. Live session count with status indicators. Token burn chart (daily/weekly). Total sessions and projects. Rate limit status when available.
+The first slice is deliberately headless:
 
-**Sessions.** Searchable, sortable table of all sessions across all projects. Columns: title, project, branch, status, token count, message count, timestamp. Click to expand session details. Resume button spawns `claude --resume` in the correct cwd via the user's terminal emulator.
+1. Align the durable product contract and repair the Claude observation baseline.
+2. Introduce ordered migrations, the private journal, deterministic reducers, and fixture replay.
+3. Establish the versioned protocol and manually started `gc-brokerd` as the sole writer and runtime authority.
+4. Supervise one installed Codex App Server per attempt and negotiate capabilities truthfully.
+5. Complete create, launch, inspect, follow, steer, interrupt, exact approval, and cancel through the CLI.
+6. Prove restart-safe coordination and an isolated workspace seeded from a clean Git repository at an explicit commit.
 
-**Live monitor.** Real-time view of active sessions. Watches `~/.claude/sessions/*.json` for status changes via the `notify` crate. Tails active JSONL files to show streaming activity. Shows current tool execution and token accumulation in progress.
+The slice uses the installed Codex default configuration. Ground Control records the trusted absolute executable path and fingerprint plus the resolved runtime, provider, model, and configuration fingerprint. Provider profiles, fallback, side-effect recovery, acceptance runners, the Tauri cutover, and macOS LaunchAgent integration remain later packages.
 
-**Project browser.** Grid of project cards showing session count, total tokens, recent activity. Click into a project to see its session list.
+Managed App Server children receive no broker credential in this slice. The private operator endpoint derives authority from its owner-only local connection; client-supplied role fields are never authoritative.
 
-**Session detail.** DAG-aware conversation viewer. Since messages use `parentUuid` to form a tree (not a flat list), the viewer should render conversation forks as branches — similar to `git log --graph`. Shows token usage per turn, tool calls, and thinking blocks.
+## Privacy and security posture
 
-### System tray
-
-Persistent tray icon showing active session count. Click to open the main window. Notifications when background agents complete or error.
-
-## Tech stack
-
-| Layer | Choice | Rationale |
-|-------|--------|-----------|
-| Core library | Rust | Shared between CLI and Tauri; fast JSONL parsing |
-| Database | SQLite + FTS5 via rusqlite (bundled) | Cross-session search, metrics aggregation |
-| File watching | notify crate (FSEvents on macOS) | Incremental JSONL indexing, live session monitoring |
-| CLI | clap | Derive-based arg parsing |
-| Desktop framework | Tauri 2 | ~3MB bundle, native webview, production-stable |
-| Frontend | Svelte 5 (runes) | Lightest runtime, best DX, differentiates from Opcode's React |
-| Components | shadcn-svelte | Professional component set |
-| Charts | LayerCake or Chart.js | Token burn visualization |
-| IPC | Tauri commands + events | Commands for request/response, events for streaming |
+- Operational data stays local and private by default.
+- Public client DTOs are explicit metadata and evidence-summary allowlists. V1 has no client operation for raw frames, full messages, prompts, tool arguments, patches, or receipts.
+- Credentials belong in macOS Keychain behind origin-bound opaque references and must not enter argv, journals, logs, diagnostics, evidence, or recovery briefs.
+- Managed work runs in isolated worktrees. Broker credentials, privileged descriptors, and operator state stay outside the worktree and child environment.
+- Unix-socket permissions and peer UID reduce accidental privilege spread; they are not a hard boundary against malicious unsandboxed code running as the same user.
+- Token budgets are optional and advisory. Missing usage remains unknown rather than zero and never blocks launch or acceptance.
 
 ## Relationship to Gantry
 
 | Concern | Gantry | Ground Control |
-|---------|--------|----------------|
-| Focus | Configuration of the agent | Runtime behavior of the agent |
-| Timing | Before/between sessions | During/after sessions |
-| Data | CLAUDE.md, hooks, skills, rules, settings | Sessions, conversations, tokens, metrics |
-| Actions | Lint, scaffold, snapshot, edit config | Monitor, search, resume, analyze |
+|---|---|---|
+| Primary focus | Agent configuration content | Runtime observation and control |
+| Timing | Before and between sessions | During and after work |
+| Owned data | Instructions, hooks, skills, rules, settings | Work units, attempts, runtime profiles, policy, evidence, usage, and effects |
+| Actions | Lint, scaffold, snapshot, and edit configuration | Observe, launch, control, recover, and verify supported runtimes |
 
-**Integration points.** Ground Control could display which Gantry archetype/configuration was active during each session. Gantry could link to Ground Control to show sessions that exercised a particular hook or skill. Both parse `~/.claude/` but for different purposes — they share the project path-encoding scheme and can share schema types via claude-config-schema.
+Ground Control may report which Gantry configuration was active and may propose a missing prerequisite. It does not silently install plugins or edit Gantry-owned configuration. Gantry does not become the runtime process or evidence authority.
 
-**Boundary rule.** Ground Control never edits configuration. Gantry never displays session content. If a feature blurs this line, it belongs in whichever project owns the underlying data.
+## Product milestones
 
-## Milestones
+### Observation baseline
 
-### v0.1 — CLI foundation (current)
+- Claude session indexing, listing, search, token burn, and live heartbeat views
+- SQLite FTS5 observation index
+- Tauri/Svelte application shell
+- Local schemas for observed Claude formats
 
-- [x] JSONL parser with version-aware deserialization
-- [x] SQLite index with FTS5 search
-- [x] Rust data models for all 12 JSONL entry types
-- [x] `gc index` — full reindex from ~/.claude/
-- [x] `gc list` — cross-project session table
-- [x] `gc search` — full-text search
-- [x] `gc burn` — token usage summary
-- [x] `gc live` — running session status
-- [x] JSON Schemas for session registry, JSONL entries, history
-- [x] Tauri app stub (compiles, wired to gc-core)
-- [ ] `gc resume` with fzf integration and cwd navigation
+### Managed headless slice
 
-### v0.2 — live monitoring
+- Correctness fixtures and visible ingestion diagnostics
+- Authoritative journal and deterministic current-state views
+- `gc-brokerd`, shared protocol, and CLI cutover
+- Managed Codex adapter with capability negotiation
+- Restart-safe work-unit lifecycle and clean immutable workspace seed
 
-- [ ] File watcher for `~/.claude/sessions/` (detect new/changed/removed sessions)
-- [ ] Incremental JSONL indexing (track byte offsets, tail new lines)
-- [ ] `gc watch` command (live-updating terminal view)
-- [ ] Tauri live session view with auto-refresh
-- [ ] System tray with session count badge
+### Desktop and recovery
 
-### v0.3 — desktop app
-
-- [ ] Svelte frontend: dashboard, sessions table, project browser
-- [ ] Token burn charts (daily/weekly breakdown)
-- [ ] Session detail view with conversation rendering
-- [ ] `gc burn --weekly` and `gc burn --project`
-- [ ] Proper app icon
-
-### v0.4 — background agents
-
-- [ ] Native support for `claude --bg` workflow
-- [ ] Launch/attach/stop background sessions from UI
-- [ ] Stream output from background sessions via `claude logs`
-- [ ] Notifications on agent completion/error
-
-### v0.5 — conversation intelligence
-
-- [ ] DAG-aware conversation viewer (branch visualization)
-- [ ] Full-text search across message content (not just titles)
-- [ ] Session comparison (token efficiency across similar tasks)
-- [ ] Export session summaries
-
-### Future
-
-- Cloud session support (when Anthropic exposes an API)
-- Multi-machine session aggregation
-- Gantry integration (show config active during each session)
-- Agent remote control (inject prompts into running sessions)
-- Cost estimation (token counts × model pricing)
+- Tauri broker client and per-user macOS service lifecycle
+- Attention-oriented mission board and exact controls
+- Provider profiles, Keychain-backed secrets, evidence, effects, and acceptance
+- Checkpoint recovery, configured fallback, and “Retry with recovery brief”
+- Production packaging, upgrades, diagnostics, storage health, and explicit purge
 
 ## Non-goals
 
-- **Not a session replay tool.** Ground Control indexes and searches sessions; it doesn't attempt to replay them interactively or provide an alternative chat interface.
-- **Not a configuration manager.** That's Gantry's job. Ground Control reads config state for context but never writes it.
-- **Not a Claude Code replacement.** Ground Control wraps `claude --resume` and `claude --bg` rather than reimplementing session management.
-- **Not an Opcode fork.** Different architecture (Svelte vs React, CLI-first vs GUI-only), different license (MIT vs AGPL), different scope (live monitoring vs history browsing).
+- **Not a provider chat client.** Ground Control presents operational state, evidence, and controls rather than replacing a runtime's conversational UI.
+- **Not an authority over observed sessions.** Filesystem telemetry and PIDs do not confer control.
+- **Not an agent configuration editor.** Gantry continues to own configuration packages.
+- **Not a promise of external rollback.** Retry and recovery preserve and communicate uncertainty; they cannot undo arbitrary real-world effects.
+- **Not a cloud scheduler in v1.** The initial authority is a private per-user service on one Mac.
+- **Not an external workflow-runtime integration.** The GC journal and coordinator own v1 durability; another runtime requires a separate post-v1 adoption decision.
+
+## Implementation choices
+
+| Layer | Choice | Rationale |
+|---|---|---|
+| Core and broker | Rust | Shared types, explicit errors, and reliable local process ownership |
+| Database | SQLite via bundled `rusqlite` | Transactional local authority and deterministic rebuildable views |
+| Observation | `notify` plus fixture-backed parsers | Native filesystem events with reproducible ingestion tests |
+| CLI | `clap` | Typed headless reference client |
+| Desktop | Tauri 2 and Svelte 5 | Small native shell over the shared broker protocol |
+| Broker transport | Private Unix-domain socket | Bounded local protocol with peer identity and no LAN listener |
 
 ## Open questions
 
-1. **Token cost estimation.** Should Ground Control maintain a pricing table for Anthropic models, or wait for Claude Code to expose cost data directly? Maintaining prices is manual and error-prone; waiting means no cost view until Anthropic adds it.
-2. **Session pruning.** Should Ground Control offer to clean up old session data, or is that out of scope (too close to destructive operations on Claude Code's own storage)?
-3. **JSONL content indexing.** FTS5 currently indexes titles and metadata. Indexing full message content would enable powerful search but significantly increases index size. Worth it?
-4. **Resume UX.** When resuming a session, should Ground Control spawn a new terminal window, or attempt to reuse an existing one? Terminal emulator detection (`$TERM_PROGRAM`) is fragile.
-5. **Shared schema dependency.** Should gc-core consume claude-config-schema as a crate dependency once Rust bindings are published, or maintain its own models? Own models are simpler but risk drift.
+1. Which minimal ServiceManagement bridge best fits the final Tauri bundle and signing layout?
+2. Which optional Codex override and exact-turn fork capabilities are supported by each installed App Server version?
+3. What bounded checkpoint limits are safe after fixture and stress testing?
+4. When, if ever, does an external durability SDK justify adding a second runtime boundary after v1?

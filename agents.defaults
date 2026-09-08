@@ -1,0 +1,3 @@
+# Public sandbox-safe defaults for coding agents.
+# Never add secrets, credentials, or machine-specific paths to this file.
+RUSTC_WRAPPER=

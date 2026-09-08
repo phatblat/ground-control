@@ -13,6 +13,16 @@ src-tauri/gen/
 .vscode/
 *.swp
 
+# Agent worktrees
+.worktrees/
+
+# Agent tooling state
+.gstack/
+
+# Local environment and secrets
+.env
+.env.*
+
 # Ground Control data
 *.db
 

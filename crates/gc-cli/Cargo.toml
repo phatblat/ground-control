@@ -16,3 +16,6 @@ serde_json = { workspace = true }
 chrono = { workspace = true }
 anyhow = { workspace = true }
 dirs-next = { workspace = true }
+
+[dev-dependencies]
+uuid = { workspace = true }

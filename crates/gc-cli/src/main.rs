@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::RecvTimeoutError;
 use std::time::Duration;
 
@@ -59,14 +59,7 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn cmd_list(store: &Store, project_filter: Option<&str>) -> anyhow::Result<()> {
-    let results = store.all_sessions()?;
-    let results: Vec<_> = match project_filter {
-        Some(filter) => results
-            .into_iter()
-            .filter(|r| r.display_name.contains(filter) || r.project_path.contains(filter))
-            .collect(),
-        None => results,
-    };
+    let results = list_sessions(store, project_filter)?;
 
     if results.is_empty() {
         println!("No sessions found. Run `gc index` to build the index.");
@@ -90,6 +83,21 @@ fn cmd_list(store: &Store, project_filter: Option<&str>) -> anyhow::Result<()> {
     }
     println!("\n{} session(s)", results.len());
     Ok(())
+}
+
+fn list_sessions(
+    store: &Store,
+    project_filter: Option<&str>,
+) -> anyhow::Result<Vec<gc_core::store::SearchResult>> {
+    let results = store.all_sessions()?;
+    let results: Vec<_> = match project_filter {
+        Some(filter) => results
+            .into_iter()
+            .filter(|r| r.display_name.contains(filter) || r.project_path.contains(filter))
+            .collect(),
+        None => results,
+    };
+    Ok(results)
 }
 
 fn cmd_search(store: &Store, query: &str) -> anyhow::Result<()> {
@@ -192,16 +200,7 @@ fn cmd_watch(store: &Store) -> anyhow::Result<()> {
                 project_path,
                 jsonl_path,
             }) => {
-                // Incremental indexing for changed session files
-                let jsonl_key = jsonl_path.to_string_lossy().to_string();
-                let offset = store.get_byte_offset(&jsonl_key).unwrap_or(0);
-                let existing = None; // fresh parse from offset
-                if let Ok(result) =
-                    parser::parse_session_incremental(&project_path, &jsonl_path, offset, existing)
-                {
-                    let _ = store.upsert_session(&result.summary);
-                    let _ = store.set_byte_offset(&jsonl_key, result.new_offset);
-                }
+                let _ = index_changed_session(store, &project_path, &jsonl_path);
 
                 refresh_display(&sessions_dir);
             }
@@ -223,6 +222,19 @@ fn cmd_watch(store: &Store) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn index_changed_session(
+    store: &Store,
+    project_path: &str,
+    jsonl_path: &Path,
+) -> anyhow::Result<()> {
+    let jsonl_key = jsonl_path.to_string_lossy().to_string();
+    let offset = store.get_byte_offset(&jsonl_key)?;
+    let result = parser::parse_session_incremental(project_path, jsonl_path, offset, None)?;
+    store.upsert_session(&result.summary)?;
+    store.set_byte_offset(&jsonl_key, result.new_offset)?;
+    Ok(())
+}
+
 fn refresh_display(sessions_dir: &std::path::Path) {
     // Clear screen and move cursor to top-left
     print!("\x1b[2J\x1b[H");
@@ -238,7 +250,14 @@ fn print_refresh_timestamp() {
 
 fn cmd_index(store: &Store) -> anyhow::Result<()> {
     let projects_dir = projects_dir();
-    let projects = parser::list_projects(&projects_dir)?;
+    let (total, project_count) = rebuild_index(store, &projects_dir)?;
+
+    println!("Indexed {total} sessions across {project_count} projects.");
+    Ok(())
+}
+
+fn rebuild_index(store: &Store, projects_dir: &Path) -> anyhow::Result<(usize, usize)> {
+    let projects = parser::list_projects(projects_dir)?;
     let mut total = 0;
 
     for project in &projects {
@@ -262,11 +281,7 @@ fn cmd_index(store: &Store) -> anyhow::Result<()> {
         }
     }
 
-    println!(
-        "Indexed {total} sessions across {} projects.",
-        projects.len()
-    );
-    Ok(())
+    Ok((total, projects.len()))
 }
 
 fn db_path() -> PathBuf {
@@ -291,5 +306,131 @@ fn format_tokens(n: i64) -> String {
         format!("{:.1}K", n as f64 / 1_000.0)
     } else {
         n.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    use uuid::Uuid;
+
+    use super::*;
+    use gc_core::models::SessionSummary;
+
+    const SESSION_ID: &str = "00000000-0000-4000-8000-000000000001";
+    const BASE: &str = include_str!("../../gc-core/tests/fixtures/claude/base.jsonl");
+    const APPEND: &str = include_str!("../../gc-core/tests/fixtures/claude/append.jsonl");
+
+    struct TestDir(PathBuf);
+
+    impl TestDir {
+        fn new(name: &str) -> Self {
+            let path = std::env::temp_dir().join(format!("gc-{name}-{}", Uuid::new_v4()));
+            fs::create_dir_all(&path).expect("create test directory");
+            Self(path)
+        }
+
+        fn path(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TestDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn write_transcript(path: &Path, contents: &str) {
+        fs::write(path, contents).expect("write synthetic transcript");
+    }
+
+    fn summary(session_id: Uuid, project_path: &str) -> SessionSummary {
+        SessionSummary {
+            session_id,
+            project_path: project_path.to_string(),
+            display_name: project_path
+                .rsplit('/')
+                .next()
+                .unwrap_or(project_path)
+                .to_string(),
+            custom_title: None,
+            ai_title: None,
+            agent_name: None,
+            started_at: None,
+            updated_at: None,
+            version: None,
+            git_branch: None,
+            kind: None,
+            status: None,
+            total_input_tokens: 0,
+            total_output_tokens: 0,
+            total_cache_read_tokens: 0,
+            total_cache_creation_tokens: 0,
+            message_count: 0,
+        }
+    }
+
+    #[test]
+    #[ignore = "GC-33: incremental watcher must reload the persisted summary"]
+    fn incremental_watch_update_preserves_persisted_totals() {
+        let root = TestDir::new("incremental-totals");
+        let path = root.path().join(format!("{SESSION_ID}.jsonl"));
+        write_transcript(&path, BASE);
+        let store = Store::open_in_memory().unwrap();
+
+        index_changed_session(&store, "/repo", &path).unwrap();
+        fs::write(&path, format!("{BASE}{APPEND}")).unwrap();
+        index_changed_session(&store, "/repo", &path).unwrap();
+
+        let sessions = store.all_sessions().unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].input_tokens, 15);
+        assert_eq!(sessions[0].output_tokens, 3);
+        assert_eq!(sessions[0].message_count, 3);
+    }
+
+    #[test]
+    #[ignore = "GC-33: project filtering must happen in SQLite before pagination"]
+    fn project_filter_can_find_a_session_beyond_the_first_page() {
+        let store = Store::open_in_memory().unwrap();
+        let target_id = Uuid::new_v4();
+        store
+            .upsert_session(&summary(target_id, "/projects/target"))
+            .unwrap();
+
+        std::thread::sleep(Duration::from_millis(1_100));
+        for index in 0..100 {
+            store
+                .upsert_session(&summary(
+                    Uuid::new_v4(),
+                    &format!("/projects/other-{index}"),
+                ))
+                .unwrap();
+        }
+
+        let filtered = list_sessions(&store, Some("target")).unwrap();
+
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].session_id, target_id.to_string());
+    }
+
+    #[test]
+    #[ignore = "GC-33: full rebuild must reconcile deleted transcripts"]
+    fn rebuild_removes_a_deleted_transcript_from_the_read_model() {
+        let root = TestDir::new("stale-deletion");
+        let project_dir = root.path().join("-repo");
+        fs::create_dir(&project_dir).unwrap();
+        let path = project_dir.join(format!("{SESSION_ID}.jsonl"));
+        write_transcript(&path, BASE);
+        let store = Store::open_in_memory().unwrap();
+
+        rebuild_index(&store, root.path()).unwrap();
+        fs::remove_file(path).unwrap();
+        rebuild_index(&store, root.path()).unwrap();
+
+        assert!(store.all_sessions().unwrap().is_empty());
     }
 }

@@ -14,6 +14,14 @@
 
 Use `rtk` before shell commands, per `RTK.md` (for example, `rtk cargo test --workspace`).
 
+Agent harnesses must load the committed public agent environment for Rust and Tauri recipes:
+
+```sh
+rtk just --dotenv-filename agents.defaults <recipe>
+```
+
+This dotenv-format profile disables sandbox-incompatible compiler wrappers without changing normal developer or CI environments. Prefer the listed `just` recipes; when a direct Cargo command is required, use `rtk env RUSTC_WRAPPER= cargo ...`. Treat `agents.defaults` as public configuration and never add secrets or machine-specific paths to it.
+
 - `just build`: build all Rust crates.
 - `just test`: run `cargo test --workspace`.
 - `just lint`: run Clippy across the workspace with warnings denied.
@@ -35,6 +43,11 @@ Rust is the primary tested surface. Add unit tests near the module under test or
 ## Commit & Pull Request Guidelines
 
 Recent history uses concise conventional-style subjects such as `feat: v0.2 live session monitoring`, `fix: include cache tokens in burn and list output`, and `docs: add project overview and usage to README`. Keep commits logically scoped and use lowercase prefixes like `feat:`, `fix:`, `docs:`, `chore:`, or `lock:`. PRs should include a summary, linked issue or plan, verification commands, and screenshots for visible Tauri/Svelte changes.
+
+## Project Tracking
+
+- Linear workspace: `LDG` (`https://linear.app/ldg`).
+- Linear team: `GC` — Ground Control. Use `GC` issue identifiers for Ground Control project work.
 
 ## Security & Configuration Tips
 
